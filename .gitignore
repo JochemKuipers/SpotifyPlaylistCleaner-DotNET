@@ -1,0 +1,7 @@
+.env
+.idea
+.vscode
+obj/
+bin/
+SpotifyPlaylistCleaner-DotNET.sln.DotSettings.user
+credentials.json
