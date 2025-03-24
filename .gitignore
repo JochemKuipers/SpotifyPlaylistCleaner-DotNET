@@ -1,8 +1,13 @@
 .env
 .idea
 .vscode
-obj/
-obj/*
-bin/
 SpotifyPlaylistCleaner-DotNET.sln.DotSettings.user
 credentials.json
+
+# Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+build/
+[Bb]in/
+[Oo]bj/
