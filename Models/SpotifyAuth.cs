@@ -12,14 +12,9 @@ namespace SpotifyPlaylistCleaner_DotNET.Models;
 
 public static class SpotifyAuth
 {
-  private const string CredentialsPath = "credentials.json";
+  public const string CredentialsPath = "credentials.json";
   private static readonly string? ClientId = Environment.GetEnvironmentVariable("SPOTIFY_CLIENT_ID");
   private static readonly EmbedIOAuthServer Server = new(new Uri("http://localhost:8080/callback"), 8080);
-
-  private static void Exiting()
-  {
-    Console.CursorVisible = true;
-  }
 
   public static async Task<SpotifyClient> Authenticate()
   {

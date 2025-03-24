@@ -16,6 +16,20 @@ public partial class MainWindowViewModel : ViewModelBase
     private SpotifyClient? _spotifyClient;
     private string _statusMessage = "";
     private ObservableCollection<FullPlaylist> _playlists = [];
+    private ObservableCollection<FullTrack> _tracks = [];
+    private FullPlaylist? _selectedPlaylist;
+
+    public FullPlaylist? SelectedPlaylist
+    {
+        get => _selectedPlaylist;
+        set {
+            this.RaiseAndSetIfChanged(ref _selectedPlaylist, value);
+            if (value != null)
+            {
+                Task.Run(() => FetchPlaylistTracks(value));
+            }
+        }
+    }
     
     public bool IsAuthenticated
     {
@@ -46,12 +60,23 @@ public partial class MainWindowViewModel : ViewModelBase
         get => _playlists;
         private set => this.RaiseAndSetIfChanged(ref _playlists, value);
     }
+
+    public ObservableCollection<FullTrack> Tracks
+    {
+        get => _tracks;
+        private set => this.RaiseAndSetIfChanged(ref _tracks, value);
+    }
     
     public ICommand AuthenticateCommand { get; }
     
     public MainWindowViewModel()
     {
         AuthenticateCommand = ReactiveCommand.CreateFromTask(AuthenticateSpotify);
+
+        if (System.IO.File.Exists(SpotifyAuth.CredentialsPath))
+        {
+            Task.Run(AuthenticateSpotify);
+        }
     }
     
     private async Task AuthenticateSpotify()
@@ -125,6 +150,54 @@ public partial class MainWindowViewModel : ViewModelBase
         catch (Exception ex)
         {
             StatusMessage = $"Failed to load playlists: {ex.Message}";
+        }
+        finally
+        {
+            IsLoadingPlaylists = false;
+        }
+    }
+
+    private async Task FetchPlaylistTracks(FullPlaylist playlist){
+        if (_spotifyClient == null) return;
+        
+        try
+        {
+            IsLoadingPlaylists = true;
+            StatusMessage = $"Loading tracks for playlist {playlist.Name}...";
+
+            var playlistId = playlist.Id;
+            if (playlistId == null) return;
+            
+            var tracksResponse = await _spotifyClient.Playlists.GetItems(playlistId);
+            var allTracks = new ObservableCollection<FullTrack>();
+            
+            // Add initial batch of tracks
+            foreach (var track in tracksResponse.Items!)
+            {
+                FullTrack fullTrack = (FullTrack)track.Track;
+                Console.WriteLine($"Track: {fullTrack.Name}, Artists: {fullTrack.Artists.Count}");
+                allTracks.Add(fullTrack);
+            }
+            
+            // Handle pagination to get all tracks
+            while (tracksResponse.Next != null)
+            {
+                tracksResponse = await _spotifyClient.NextPage(tracksResponse);
+                foreach (var track in tracksResponse.Items!)
+                {
+                    FullTrack fullTrack = (FullTrack)track.Track;
+                    Console.WriteLine($"Track: {fullTrack.Name}, Artists: {fullTrack.Artists.Count}");
+                    allTracks.Add(fullTrack);
+                }
+            }
+
+            Tracks = allTracks;
+            StatusMessage = $"Loaded {allTracks.Count} tracks for playlist {playlist.Name}";
+
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Failed to load tracks for playlist {playlist.Name}: {ex.Message}";
         }
         finally
         {
