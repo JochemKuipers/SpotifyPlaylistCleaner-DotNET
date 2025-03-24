@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("SpotifyPlaylistCleaner-DotNET")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+825c33fff83edfa30eb00ee42e9536c721ec83cb")]
 [assembly: System.Reflection.AssemblyProductAttribute("SpotifyPlaylistCleaner-DotNET")]
 [assembly: System.Reflection.AssemblyTitleAttribute("SpotifyPlaylistCleaner-DotNET")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
