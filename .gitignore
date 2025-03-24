@@ -2,6 +2,7 @@
 .idea
 .vscode
 obj/
+obj/*
 bin/
 SpotifyPlaylistCleaner-DotNET.sln.DotSettings.user
 credentials.json
