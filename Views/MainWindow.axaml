@@ -3,24 +3,112 @@
         xmlns:vm="using:SpotifyPlaylistCleaner_DotNET.ViewModels"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+        xmlns:spotify="using:SpotifyAPI.Web"
+        xmlns:asyncImage="using:AsyncImageLoader"
+        mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="600"
         x:Class="SpotifyPlaylistCleaner_DotNET.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Icon="/Assets/avalonia-logo.ico"
-        Title="SpotifyPlaylistCleaner_DotNET">
+        Title="Spotify Playlist Cleaner"
+        Background="#121212">
+
+    <Window.Resources>
+        <converters:PlaylistImageConverter x:Key="playlistImageConverter"/>
+    </Window.Resources>
 
     <Design.DataContext>
-        <!-- This only sets the DataContext for the previewer in an IDE,
-             to set the actual DataContext for runtime, set the DataContext property in code (look at App.axaml.cs) -->
         <vm:MainWindowViewModel/>
     </Design.DataContext>
-    
-    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="10">
-        <Button Content="Login with Spotify" 
-                Command="{Binding AuthenticateCommand}"
-                IsEnabled="{Binding !IsAuthenticating}"/>
-        <TextBlock Text="{Binding StatusMessage}"/>
-        <!-- Add a loading indicator when IsAuthenticating is true -->
-        <TextBlock Text="Loading..." IsVisible="{Binding IsAuthenticating}"/>
-    </StackPanel>
+
+    <Grid RowDefinitions="Auto,*">
+        <!-- Header -->
+        <Border Grid.Row="0" Grid.ColumnSpan="2" Background="#1DB954" Padding="15" BoxShadow="0 1 10 0 #20000000">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <StackPanel Orientation="Horizontal" Grid.Column="0" Spacing="10" VerticalAlignment="Center">
+                    <TextBlock Text="Spotify Playlist Cleaner" FontSize="20" FontWeight="Bold" Foreground="White"/>
+                </StackPanel>
+                
+                <TextBlock Grid.Column="1" Text="{Binding StatusMessage}" VerticalAlignment="Center" 
+                           Foreground="White" HorizontalAlignment="Center"/>
+                
+                <Button Grid.Column="2" Content="Login with Spotify" 
+                        Command="{Binding AuthenticateCommand}"
+                        IsEnabled="{Binding !IsAuthenticating}"
+                        IsVisible="{Binding !IsAuthenticated}"
+                        Padding="10,5"
+                        Background="#121212"
+                        Foreground="White"/>
+            </Grid>
+        </Border>
+
+        <!-- Content area with sidebar and main content -->
+        <Grid Grid.Row="1" ColumnDefinitions="250,*">
+            <!-- Sidebar -->
+            <Border Grid.Column="0" Background="#212121" Padding="10">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="Your Playlists" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,10" Foreground="White"/>
+                    
+                    <ProgressBar DockPanel.Dock="Top" IsIndeterminate="True" IsVisible="{Binding IsLoadingPlaylists}" 
+                                 Height="4" Margin="0,5,0,10" Foreground="#1DB954"/>
+                    
+                    <!-- Playlists List -->
+                    <ListBox ItemsSource="{Binding Playlists}" Background="Transparent" Padding="0"
+                             IsVisible="{Binding IsAuthenticated}">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,5">
+                                    <!-- Handle potential null or empty Images collection -->
+                                    <Border Width="40" Height="40" Background="#333333" CornerRadius="4">
+                                        <Panel>
+                                            <!-- Show the first letter as fallback -->
+                                            <TextBlock Text="{Binding Name[0]}" 
+                                                    VerticalAlignment="Center" 
+                                                    HorizontalAlignment="Center"
+                                                    Foreground="White" 
+                                                    FontWeight="Bold"/>
+                                                    
+                                            <!-- Show image if available, it will overlay the text -->
+                                            <Image asyncImage:ImageLoader.Source="{Binding Images[0].Url}"
+                                                Stretch="UniformToFill"
+                                                IsVisible="{Binding Images, Converter={x:Static ObjectConverters.IsNotNull}}"/> 
+                                        </Panel>
+                                    </Border>
+                                    <TextBlock Text="{Binding Name}" VerticalAlignment="Center" Foreground="White"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </Border>
+
+            <!-- Main Content Area -->
+            <Border Grid.Column="1" Background="#121212" Padding="20">
+                <Grid RowDefinitions="Auto,*">
+                    <!-- Content Header -->
+                    <TextBlock Grid.Row="0" Text="Select a playlist to clean" FontSize="24" FontWeight="Bold" 
+                               Margin="0,0,0,20" Foreground="White"
+                               IsVisible="{Binding IsAuthenticated}"/>
+                    
+                    <!-- Unauthenticated State -->
+                    <StackPanel Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center" 
+                                IsVisible="{Binding !IsAuthenticated}" Spacing="15">
+                        <TextBlock Text="Welcome to Spotify Playlist Cleaner" FontSize="24" FontWeight="Bold" Foreground="White"/>
+                        <TextBlock Text="Log in with your Spotify account to get started" Foreground="#B3B3B3" 
+                                   HorizontalAlignment="Center"/>
+                        <Button Content="Login with Spotify" Command="{Binding AuthenticateCommand}" 
+                                IsEnabled="{Binding !IsAuthenticating}" 
+                                HorizontalAlignment="Center" Padding="15,10"
+                                Background="#1DB954" Foreground="White"/>
+                        <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsAuthenticating}" 
+                                     Width="200" Height="4" Margin="0,5,0,0" Foreground="#1DB954"/>
+                    </StackPanel>
+                    
+                    <!-- Authenticated but no playlist selected -->
+                    <TextBlock Grid.Row="1" Text="Select a playlist from the sidebar to view and clean it" 
+                               VerticalAlignment="Center" HorizontalAlignment="Center"
+                               Foreground="#B3B3B3" IsVisible="{Binding IsAuthenticated}"/>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
 </Window>
