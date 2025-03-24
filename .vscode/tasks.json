@@ -1,0 +1,38 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "build",
+                "${workspaceFolder}/SpotifyPlaylistCleaner-DotNET.sln",
+                "/property:GenerateFullPaths=true",
+                "/consoleloggerparameters:NoSummary"
+            ],
+            "problemMatcher": "$msCompile",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "watch",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "watch",
+                "run",
+                "--project",
+                "${workspaceFolder}/SpotifyPlaylistCleaner-DotNET.sln"
+            ],
+            "problemMatcher": "$msCompile",
+            "options": {
+                "env": {
+                    "DOTNET_WATCH_RESTART_ON_RUDE_EDIT": "true"
+                }
+            }
+        }
+    ]
+}
