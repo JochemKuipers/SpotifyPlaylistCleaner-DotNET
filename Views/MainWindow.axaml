@@ -13,6 +13,10 @@
         Title="Spotify Playlist Cleaner"
         Background="#121212">
 
+    <Window.Resources>
+        <converters:ItemIndexConverter x:Key="ItemIndexConverter"/>
+    </Window.Resources>
+
     <Design.DataContext>
         <vm:MainWindowViewModel/>
     </Design.DataContext>
@@ -127,25 +131,94 @@
                                     Padding="15,8"/>
                         </StackPanel>
 
-                        <!-- Track List - Now in a row with * height which means "take all remaining space" -->
+                        <!-- Loading indicators - Show when tracks are loading -->
+                        <Grid Grid.Row="2" 
+                              VerticalAlignment="Center"
+                              HorizontalAlignment="Center"
+                              IsVisible="{Binding IsLoadingTracks}">
+                            <StackPanel Spacing="20" Width="300">
+                                <!-- Spinner with animation -->
+                                <Panel HorizontalAlignment="Center" Margin="0,0,0,10">
+                                    <Border Width="50" Height="50" 
+                                            CornerRadius="25" 
+                                            Background="Transparent"
+                                            BorderBrush="#1DB954" 
+                                            BorderThickness="4"
+                                            IsHitTestVisible="False">
+                                        <Border.Styles>
+                                            <Style Selector="Border">
+                                                <Setter Property="RenderTransform">
+                                                    <RotateTransform/>
+                                                </Setter>
+                                                <Style.Animations>
+                                                    <Animation Duration="0:0:1" 
+                                                               IterationCount="Infinite">
+                                                        <KeyFrame Cue="0">
+                                                            <Setter Property="RotateTransform.Angle" Value="0"/>
+                                                        </KeyFrame>
+                                                        <KeyFrame Cue="1">
+                                                            <Setter Property="RotateTransform.Angle" Value="360"/>
+                                                        </KeyFrame>
+                                                    </Animation>
+                                                </Style.Animations>
+                                            </Style>
+                                        </Border.Styles>
+                                    </Border>
+                                    
+                                    <TextBlock Text="{Binding LoadingProgress, StringFormat=\{0\}%}"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"
+                                               Foreground="White"/>
+                                </Panel>
+                                
+                                <!-- Progress Bar -->
+                                <ProgressBar Value="{Binding LoadingProgress}" 
+                                             Maximum="100" 
+                                             Height="6" 
+                                             Foreground="#1DB954"/>
+                                
+                                <!-- Status Text -->
+                                <TextBlock Text="{Binding LoadingStatusMessage}" 
+                                           HorizontalAlignment="Center" 
+                                           Foreground="#B3B3B3"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Track List - Show when not loading -->
                         <ListBox Grid.Row="2"
                                 ItemsSource="{Binding Tracks}" 
                                 Background="Transparent" 
                                 Padding="0"
                                 ScrollViewer.VerticalScrollBarVisibility="Auto"
-                                IsVisible="{Binding Tracks, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                IsVisible="{Binding !IsLoadingTracks}">
                             <!-- Keep your existing ListBox.ItemTemplate -->
                             <ListBox.ItemTemplate>
                                 <DataTemplate x:DataType="spotify:FullTrack">
                                     <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,5">
+                                        <!-- Track number/index -->
+                                        <Border Width="24" Height="40" VerticalAlignment="Center">
+                                            <TextBlock Foreground="#B3B3B3" 
+                                                       VerticalAlignment="Center"
+                                                       HorizontalAlignment="Center"
+                                                       FontSize="14">
+                                                <TextBlock.Text>
+                                                    <MultiBinding Converter="{StaticResource ItemIndexConverter}">
+                                                        <Binding Path="$parent[ListBox].ItemsSource"/>
+                                                        <Binding Path="."/>
+                                                    </MultiBinding>
+                                                </TextBlock.Text>
+                                            </TextBlock>
+                                        </Border>
+                                                                                
+                                        <!-- Album art (existing) -->
                                         <Border Width="40" Height="40" Background="#333333" CornerRadius="4">
                                             <Panel>
                                                 <!-- Show the first letter as fallback -->
                                                 <TextBlock Text="{Binding Name[0]}" 
-                                                        VerticalAlignment="Center" 
-                                                        HorizontalAlignment="Center"
-                                                        Foreground="White" 
-                                                        FontWeight="Bold"/>
+                                                    VerticalAlignment="Center" 
+                                                    HorizontalAlignment="Center"
+                                                    Foreground="White" 
+                                                    FontWeight="Bold"/>
                                                 
                                                 <!-- Show image if available, it will overlay the text -->
                                                 <Image asyncImage:ImageLoader.Source="{Binding Album.Images[0].Url}"
@@ -153,6 +226,8 @@
                                                     IsVisible="{Binding Album.Images, Converter={x:Static ObjectConverters.IsNotNull}}"/> 
                                             </Panel>
                                         </Border>
+                                        
+                                        <!-- Rest of your track item template remains the same -->
                                         <StackPanel VerticalAlignment="Center">
                                             <StackPanel Orientation="Horizontal" Spacing="5">
                                                 <TextBlock Text="{Binding Name}" Foreground="White"/>

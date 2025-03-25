@@ -13,6 +13,9 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _isAuthenticated;
     private bool _isAuthenticating;
     private bool _isLoadingPlaylists;
+    private bool _isLoadingTracks;
+    private int _loadingProgress;
+    private string _loadingStatusMessage = "";
     private SpotifyClient? _spotifyClient;
     private string _statusMessage = "";
     private ObservableCollection<FullPlaylist> _playlists = [];
@@ -49,6 +52,24 @@ public partial class MainWindowViewModel : ViewModelBase
         private set => this.RaiseAndSetIfChanged(ref _isLoadingPlaylists, value);
     }
     
+    public bool IsLoadingTracks
+    {
+        get => _isLoadingTracks;
+        private set => this.RaiseAndSetIfChanged(ref _isLoadingTracks, value);
+    }
+
+    public int LoadingProgress
+    {
+        get => _loadingProgress;
+        private set => this.RaiseAndSetIfChanged(ref _loadingProgress, value);
+    }
+
+    public string LoadingStatusMessage
+    {
+        get => _loadingStatusMessage;
+        private set => this.RaiseAndSetIfChanged(ref _loadingStatusMessage, value);
+    }
+
     public string StatusMessage
     {
         get => _statusMessage;
@@ -109,6 +130,8 @@ public partial class MainWindowViewModel : ViewModelBase
     private async Task FetchUserPlaylists()
     {
         if (_spotifyClient == null) return;
+
+        PrivateUser user = await _spotifyClient.UserProfile.Current();
         
         try
         {
@@ -121,12 +144,9 @@ public partial class MainWindowViewModel : ViewModelBase
             // Add initial batch of playlists
             foreach (var playlist in playlistsResponse.Items!)
             {
-                Console.WriteLine($"Playlist: {playlist.Name}, Images: {playlist.Images?.Count ?? 0}");
-                if (playlist.Images?.Count > 0)
-                {
-                    Console.WriteLine($"First image URL: {playlist.Images[0].Url}");
+                if (playlist.Owner?.Id == user.Id){
+                    allPlaylists.Add(playlist);
                 }
-                allPlaylists.Add(playlist);
             }
             
             // Handle pagination to get all playlists
@@ -135,11 +155,6 @@ public partial class MainWindowViewModel : ViewModelBase
                 playlistsResponse = await _spotifyClient.NextPage(playlistsResponse);
                 foreach (var playlist in playlistsResponse.Items!)
                 {
-                    Console.WriteLine($"Playlist: {playlist.Name}, Images: {playlist.Images?.Count ?? 0}");
-                    if (playlist.Images?.Count > 0)
-                    {
-                        Console.WriteLine($"First image URL: {playlist.Images[0].Url}");
-                    }
                     allPlaylists.Add(playlist);
                 }
             }
@@ -162,20 +177,25 @@ public partial class MainWindowViewModel : ViewModelBase
         
         try
         {
-            IsLoadingPlaylists = true;
+            IsLoadingTracks = true;
+            LoadingProgress = 0;
             StatusMessage = $"Loading tracks for playlist {playlist.Name}...";
 
             var playlistId = playlist.Id;
             if (playlistId == null) return;
+
+            var totalTracks = playlist.Tracks?.Total ?? 0;
             
             var tracksResponse = await _spotifyClient.Playlists.GetItems(playlistId);
             var allTracks = new ObservableCollection<FullTrack>();
+
+            LoadingProgress = (int)(tracksResponse.Items!.Count * 100.0 / totalTracks);
+            LoadingStatusMessage = $"Loaded {tracksResponse.Items.Count} of {totalTracks} tracks...";
             
             // Add initial batch of tracks
             foreach (var track in tracksResponse.Items!)
             {
                 FullTrack fullTrack = (FullTrack)track.Track;
-                Console.WriteLine($"Track: {fullTrack.Name}, Artists: {fullTrack.Artists.Count}");
                 allTracks.Add(fullTrack);
             }
             
@@ -186,13 +206,15 @@ public partial class MainWindowViewModel : ViewModelBase
                 foreach (var track in tracksResponse.Items!)
                 {
                     FullTrack fullTrack = (FullTrack)track.Track;
-                    Console.WriteLine($"Track: {fullTrack.Name}, Artists: {fullTrack.Artists.Count}");
                     allTracks.Add(fullTrack);
                 }
+
+                LoadingProgress = (int)(allTracks.Count * 100.0 / totalTracks);
+                LoadingStatusMessage = $"Loaded {allTracks.Count} of {totalTracks} tracks...";
             }
 
-            Tracks = allTracks;
-            StatusMessage = $"Loaded {allTracks.Count} tracks for playlist {playlist.Name}";
+            Tracks = [.. allTracks];
+            StatusMessage = $"Loaded {allTracks.Count} tracks";
 
         }
         catch (Exception ex)
@@ -201,7 +223,7 @@ public partial class MainWindowViewModel : ViewModelBase
         }
         finally
         {
-            IsLoadingPlaylists = false;
+            IsLoadingTracks = false;
         }
     }
 }
