@@ -6,6 +6,7 @@
         <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
         <ApplicationManifest>app.manifest</ApplicationManifest>
         <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+        <ApplicationIcon>Assets\Icons\icon.ico</ApplicationIcon>
     </PropertyGroup>
 
     <ItemGroup>
@@ -18,6 +19,7 @@
         <PackageReference Include="Avalonia.Desktop" Version="11.2.5" />
         <PackageReference Include="Avalonia.ReactiveUI" Version="11.2.5" />
         <PackageReference Include="Avalonia.ReactiveUI.Events" Version="0.10.22" />
+        <PackageReference Include="Avalonia.Svg.Skia" Version="11.2.0.2" />
         <PackageReference Include="Avalonia.Themes.Fluent" Version="11.2.5" />
         <PackageReference Include="Avalonia.Fonts.Inter" Version="11.2.5" />
         <!--Condition below is needed to remove Avalonia.Diagnostics package from build output in Release configuration.-->
