@@ -111,7 +111,7 @@
 
                         <!-- Description -->
                         <TextBlock Grid.Row="0"
-                                  Text="{Binding SelectedPlaylist.Description}"
+                                  Text="{Binding SelectedPlaylist.Description, FallbackValue='No description available'}"
                                   Foreground="#B3B3B3"
                                   Margin="0,0,0,15"
                                   TextWrapping="Wrap"/>

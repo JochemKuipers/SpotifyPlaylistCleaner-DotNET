@@ -83,7 +83,7 @@ public static class SpotifyAuth
         {
             CodeChallenge = challenge,
             CodeChallengeMethod = "S256",
-            Scope = [UserReadEmail, UserReadPrivate, PlaylistReadPrivate, PlaylistReadCollaborative]
+            Scope = [UserReadPrivate, PlaylistReadPrivate, PlaylistReadCollaborative, PlaylistModifyPublic, PlaylistModifyPrivate, UserLibraryRead, UserLibraryModify]
         };
 
         var uri = request.ToUri();
