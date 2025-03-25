@@ -44,6 +44,42 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     // Add this field to your class
     private readonly JsonSerializerOptions _jsonOptions;
 
+    // Add these properties to your MainWindowViewModel class
+
+    private string _searchQuery = "";
+    public string SearchQuery
+    {
+        get => _searchQuery;
+        set
+        {
+            if (this.RaiseAndSetIfChanged(ref _searchQuery, value) != null && _tracks != null)
+            {
+                // Debug line - you can remove this after testing
+                Console.WriteLine($"Search query updated: '{value}' (empty: {string.IsNullOrWhiteSpace(value)})");
+
+                this.RaisePropertyChanged(nameof(FilteredTracks));
+            }
+        }
+    }
+
+    // A computed property that filters the tracks based on search query
+    public IEnumerable<FullTrack> FilteredTracks
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(SearchQuery))
+            {
+                return Tracks;
+            }
+
+            return Tracks.Where(t =>
+                (t.Name?.Contains(SearchQuery, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                t.Artists.Any(a => a.Name?.Contains(SearchQuery, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (t.Album?.Name?.Contains(SearchQuery, StringComparison.OrdinalIgnoreCase) ?? false)
+            );
+        }
+    }
+
     public FullPlaylist? SelectedPlaylist
     {
         get => _selectedPlaylist;
@@ -623,6 +659,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     // Add a command to force refresh (bypass cache)
     private void ForceRefreshTracks(bool refreshAll = false)
     {
+        SearchQuery = "";
         if (refreshAll)
         {
             // Clear all cache files
