@@ -12,3 +12,4 @@ build/
 [Bb]in/
 [Oo]bj/
 .editorconfig
+/.vs
