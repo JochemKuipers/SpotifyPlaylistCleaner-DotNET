@@ -267,6 +267,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         {
             Tracks.Clear();
 
+            PrivateUser user = await _spotifyClient.UserProfile.Current();
+
             IsLoadingTracks = true;
             LoadingProgress = 0;
             StatusMessage = $"Loading tracks for playlist {playlist.Name}...";
@@ -276,7 +278,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             // Check for cancellation before API call
             cancellationToken.ThrowIfCancellationRequested();
 
-            var tracksResponse = await _spotifyClient.Playlists.GetItems(playlistId, cancellationToken);
+            var tracksRequest = new PlaylistGetItemsRequest
+            {
+                Limit = 50,
+                Market = user.Country
+            };
+            var tracksResponse = await _spotifyClient.Playlists.GetItems(playlistId, tracksRequest, cancellationToken);
             var allTracks = new ObservableCollection<FullTrack>();
 
             LoadingProgress = (int)(tracksResponse.Items!.Count * 100.0 / totalTracks);
@@ -296,6 +303,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             {
                 // Check cancellation BEFORE API call
                 cancellationToken.ThrowIfCancellationRequested();
+
 
                 // Make the API call (no token parameter)
                 tracksResponse = await _spotifyClient.NextPage(tracksResponse);
@@ -369,6 +377,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         {
             Tracks.Clear();
 
+            PrivateUser user = await _spotifyClient.UserProfile.Current();
+
             IsLoadingTracks = true;
             LoadingProgress = 0;
             StatusMessage = "Loading your liked songs...";
@@ -377,7 +387,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             cancellationToken.ThrowIfCancellationRequested();
 
             // Get first page to determine total
-            var initialRequest = new LibraryTracksRequest { Limit = 50 };
+            var initialRequest = new LibraryTracksRequest { Limit = 50, Market = user.Country };
             var initialResponse = await _spotifyClient.Library.GetTracks(initialRequest, cancellationToken);
             var totalTracks = initialResponse.Total ?? 0;
 
@@ -390,7 +400,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
             // Calculate how many requests we need to make (50 items per request)
             int totalRequests = (int)Math.Ceiling(totalTracks / 50.0);
-            int maxConcurrentRequests = 5; // Adjust based on API rate limits
+            int maxConcurrentRequests = 25; // Adjust based on API rate limits
 
             // Create collection for all tracks
             var allTracks = new List<FullTrack>();
@@ -437,6 +447,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                         // Create request with offset
                         var request = new LibraryTracksRequest
                         {
+                            Market = user.Country,
                             Limit = 50,
                             Offset = currentOffset
                         };
