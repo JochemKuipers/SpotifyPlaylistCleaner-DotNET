@@ -154,7 +154,13 @@
                                             </Panel>
                                         </Border>
                                         <StackPanel VerticalAlignment="Center">
-                                            <TextBlock Text="{Binding Name}" Foreground="White"/>
+                                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                                <TextBlock Text="{Binding Name}" Foreground="White"/>
+                                                <Border Background="#333333" CornerRadius="2" Padding="3,3" 
+                                                        IsVisible="{Binding Explicit}">
+                                                    <TextBlock Text="Explicit" FontSize="10" Foreground="#B3B3B3"/>
+                                                </Border>
+                                            </StackPanel>
                                             <TextBlock Foreground="#B3B3B3" FontSize="12">
                                                 <TextBlock.Text>
                                                     <MultiBinding StringFormat="{}{0}">
