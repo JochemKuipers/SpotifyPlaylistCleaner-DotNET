@@ -376,17 +376,29 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
             cancellationToken.ThrowIfCancellationRequested();
 
-            // Get first page of saved tracks
-            var savedTracksResponse = await _spotifyClient.Library.GetTracks(cancellationToken);
-            var totalTracks = savedTracksResponse.Total ?? 0;
-            var allTracks = new ObservableCollection<FullTrack>();
+            // Get first page to determine total
+            var initialRequest = new LibraryTracksRequest { Limit = 50 };
+            var initialResponse = await _spotifyClient.Library.GetTracks(initialRequest, cancellationToken);
+            var totalTracks = initialResponse.Total ?? 0;
 
-            // Initial progress update
-            LoadingProgress = totalTracks > 0 ? (int)(savedTracksResponse.Items!.Count * 100.0 / totalTracks) : 0;
-            LoadingStatusMessage = $"Loaded {savedTracksResponse.Items!.Count} of {totalTracks} tracks...";
+            if (totalTracks == 0)
+            {
+                Tracks = [];
+                StatusMessage = "No liked songs found";
+                return;
+            }
 
-            // Process first batch of tracks
-            foreach (var item in savedTracksResponse.Items)
+            // Calculate how many requests we need to make (50 items per request)
+            int totalRequests = (int)Math.Ceiling(totalTracks / 50.0);
+            int maxConcurrentRequests = 5; // Adjust based on API rate limits
+
+            // Create collection for all tracks
+            var allTracks = new List<FullTrack>();
+            var loadedCount = 0;
+            var progressLock = new object();
+
+            // Process the first page we already loaded
+            foreach (var item in initialResponse.Items!)
             {
                 if (item.Track is FullTrack track)
                 {
@@ -394,42 +406,89 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 }
             }
 
-            // Handle pagination to get all tracks
-            while (savedTracksResponse.Next != null)
+            loadedCount = initialResponse.Items!.Count;
+            LoadingProgress = (int)(loadedCount * 100.0 / totalTracks);
+            LoadingStatusMessage = $"Loaded {loadedCount} of {totalTracks} tracks...";
+
+            // Prepare batch requests in groups for the remaining items
+            var tasks = new List<Task>();
+
+            // Start from offset 50 (after first page)
+            for (int offset = 50; offset < totalTracks; offset += 50)
             {
-                // Check cancellation BEFORE API call
-                cancellationToken.ThrowIfCancellationRequested();
-
-                // Make the API call (no token parameter)
-                savedTracksResponse = await _spotifyClient.NextPage(savedTracksResponse);
-
-                // Check cancellation AFTER API call but BEFORE processing
-                cancellationToken.ThrowIfCancellationRequested();
-
-                // Process results...
-                foreach (var item in savedTracksResponse.Items!)
+                // Check if we need to throttle concurrent requests
+                if (tasks.Count >= maxConcurrentRequests)
                 {
-                    if (item.Track is FullTrack track)
-                    {
-                        allTracks.Add(track);
-                    }
+                    // Wait for any task to complete before adding more
+                    await Task.WhenAny(tasks);
+                    tasks.RemoveAll(t => t.IsCompleted);
                 }
 
-                // Update progress
-                LoadingProgress = (int)(allTracks.Count * 100.0 / totalTracks);
-                LoadingStatusMessage = $"Loaded {allTracks.Count} of {totalTracks} tracks...";
+                // Local variable for closure
+                int currentOffset = offset;
+
+                var task = Task.Run(async () =>
+                {
+                    try
+                    {
+                        // Check for cancellation
+                        cancellationToken.ThrowIfCancellationRequested();
+
+                        // Create request with offset
+                        var request = new LibraryTracksRequest
+                        {
+                            Limit = 50,
+                            Offset = currentOffset
+                        };
+
+                        // Make API call
+                        var response = await _spotifyClient.Library.GetTracks(request, cancellationToken);
+
+                        // Process response
+                        var batchTracks = new List<FullTrack>();
+                        foreach (var item in response.Items!)
+                        {
+                            if (item.Track is FullTrack track)
+                            {
+                                batchTracks.Add(track);
+                            }
+                        }
+
+                        // Thread-safe update of progress and tracks
+                        lock (progressLock)
+                        {
+                            allTracks.AddRange(batchTracks);
+                            loadedCount += batchTracks.Count;
+                            LoadingProgress = (int)(loadedCount * 100.0 / totalTracks);
+                            LoadingStatusMessage = $"Loaded {loadedCount} of {totalTracks} tracks...";
+                        }
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        Console.WriteLine($"Error fetching batch at offset {currentOffset}: {ex.Message}");
+                    }
+                }, cancellationToken);
+
+                tasks.Add(task);
             }
 
+            // Wait for all remaining tasks to complete
+            await Task.WhenAll(tasks);
+
+            // Check for cancellation before final update
             cancellationToken.ThrowIfCancellationRequested();
 
-            // Update UI with all tracks
+            // Sort tracks by added date or name if needed
+            // allTracks = allTracks.OrderBy(t => t.Name).ToList();
+
+            // Update UI
             Tracks = [.. allTracks];
             StatusMessage = $"Loaded {allTracks.Count} liked songs";
 
             // Save to cache
             if (IsCacheEnabled)
             {
-                SaveLikedTracksToCache(allTracks);
+                SaveLikedTracksToCache(Tracks);
             }
         }
         catch (OperationCanceledException)
