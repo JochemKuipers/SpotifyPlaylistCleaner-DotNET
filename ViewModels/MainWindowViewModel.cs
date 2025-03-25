@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.ObjectModel;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using SpotifyAPI.Web;
@@ -8,7 +9,7 @@ using ReactiveUI;
 
 namespace SpotifyPlaylistCleaner_DotNET.ViewModels;
 
-public partial class MainWindowViewModel : ViewModelBase
+public partial class MainWindowViewModel : ViewModelBase, IDisposable
 {
     private bool _isAuthenticated;
     private bool _isAuthenticating;
@@ -22,14 +23,31 @@ public partial class MainWindowViewModel : ViewModelBase
     private ObservableCollection<FullTrack> _tracks = [];
     private FullPlaylist? _selectedPlaylist;
 
+    // Add a CancellationTokenSource for managing API requests
+    private CancellationTokenSource? _currentLoadingCts;
+
     public FullPlaylist? SelectedPlaylist
     {
         get => _selectedPlaylist;
-        set {
+        set
+        {
             this.RaiseAndSetIfChanged(ref _selectedPlaylist, value);
+
             if (value != null)
             {
-                Task.Run(() => FetchPlaylistTracks(value));
+                // Cancel any ongoing track loading operations
+                CancelOngoingOperations();
+
+                if (value.Id == "liked_songs_virtual")
+                {
+                    // User selected "Liked Songs"
+                    Task.Run(FetchLikedTracks);
+                }
+                else
+                {
+                    // User selected a real playlist
+                    Task.Run(() => FetchPlaylistTracks(value));
+                }
             }
         }
     }
@@ -89,10 +107,13 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     public ICommand AuthenticateCommand { get; }
+    public ICommand LoadLikedTracksCommand { get; }
+
 
     public MainWindowViewModel()
     {
         AuthenticateCommand = ReactiveCommand.CreateFromTask(AuthenticateSpotify);
+        LoadLikedTracksCommand = ReactiveCommand.CreateFromTask(FetchLikedTracks);
 
         if (System.IO.File.Exists(SpotifyAuth.CredentialsPath))
         {
@@ -138,13 +159,33 @@ public partial class MainWindowViewModel : ViewModelBase
             IsLoadingPlaylists = true;
             StatusMessage = "Loading your playlists...";
 
+            // Create the liked songs virtual playlist and add it first
+            var likedSongsPlaylist = new FullPlaylist
+            {
+                Id = "liked_songs_virtual",
+                Name = "Liked Songs",
+                Description = "Songs you've liked on Spotify",
+                Images = [
+                    new Image {
+                        Url = "https://t.scdn.co/images/3099b3803ad9496896c43f22fe9be8c4.png"
+                    }
+                ],
+                // Set owner to current user
+                Owner = new PublicUser { Id = user.Id }
+            };
+
+            var allPlaylists = new ObservableCollection<FullPlaylist>
+            {
+                likedSongsPlaylist
+            };
+
             var playlistsResponse = await _spotifyClient.Playlists.CurrentUsers();
-            var allPlaylists = new ObservableCollection<FullPlaylist>();
 
             // Add initial batch of playlists
             foreach (var playlist in playlistsResponse.Items!)
             {
-                if (playlist.Owner?.Id == user.Id){
+                if (playlist.Owner?.Id == user.Id)
+                {
                     allPlaylists.Add(playlist);
                 }
             }
@@ -172,11 +213,16 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
-    private async Task FetchPlaylistTracks(FullPlaylist playlist){
+    private async Task FetchPlaylistTracks(FullPlaylist playlist)
+    {
         if (_spotifyClient == null) return;
+
+        var cancellationToken = _currentLoadingCts?.Token ?? CancellationToken.None;
 
         try
         {
+            Tracks.Clear();
+
             IsLoadingTracks = true;
             LoadingProgress = 0;
             StatusMessage = $"Loading tracks for playlist {playlist.Name}...";
@@ -186,7 +232,10 @@ public partial class MainWindowViewModel : ViewModelBase
 
             var totalTracks = playlist.Tracks?.Total ?? 0;
 
-            var tracksResponse = await _spotifyClient.Playlists.GetItems(playlistId);
+            // Check for cancellation before API call
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var tracksResponse = await _spotifyClient.Playlists.GetItems(playlistId, cancellationToken);
             var allTracks = new ObservableCollection<FullTrack>();
 
             LoadingProgress = (int)(tracksResponse.Items!.Count * 100.0 / totalTracks);
@@ -195,35 +244,152 @@ public partial class MainWindowViewModel : ViewModelBase
             // Add initial batch of tracks
             foreach (var track in tracksResponse.Items!)
             {
-                FullTrack fullTrack = (FullTrack)track.Track;
-                allTracks.Add(fullTrack);
+                if (track.Track is FullTrack fullTrack)
+                {
+                    allTracks.Add(fullTrack);
+                }
             }
 
             // Handle pagination to get all tracks
             while (tracksResponse.Next != null)
             {
+                // Check for cancellation before each API call
+                cancellationToken.ThrowIfCancellationRequested();
+
                 tracksResponse = await _spotifyClient.NextPage(tracksResponse);
                 foreach (var track in tracksResponse.Items!)
                 {
-                    FullTrack fullTrack = (FullTrack)track.Track;
-                    allTracks.Add(fullTrack);
+                    if (track.Track is FullTrack fullTrack)
+                    {
+                        allTracks.Add(fullTrack);
+                    }
                 }
 
                 LoadingProgress = (int)(allTracks.Count * 100.0 / totalTracks);
                 LoadingStatusMessage = $"Loaded {allTracks.Count} of {totalTracks} tracks...";
             }
 
+            // Final cancellation check before updating UI
+            cancellationToken.ThrowIfCancellationRequested();
+
             Tracks = [.. allTracks];
             StatusMessage = $"Loaded {allTracks.Count} tracks";
-
+        }
+        catch (OperationCanceledException)
+        {
+            // Operation was canceled, no need to update UI
         }
         catch (Exception ex)
         {
-            StatusMessage = $"Failed to load tracks for playlist {playlist.Name}: {ex.Message}";
+            if (!cancellationToken.IsCancellationRequested)
+            {
+                StatusMessage = $"Failed to load tracks for playlist {playlist.Name}: {ex.Message}";
+            }
         }
         finally
         {
-            IsLoadingTracks = false;
+            // Only update if not canceled
+            if (!cancellationToken.IsCancellationRequested)
+            {
+                IsLoadingTracks = false;
+            }
         }
+    }
+
+    private async Task FetchLikedTracks()
+    {
+        if (_spotifyClient == null) return;
+
+        var cancellationToken = _currentLoadingCts?.Token ?? CancellationToken.None;
+
+        try
+        {
+            Tracks.Clear();
+
+            IsLoadingTracks = true;
+            LoadingProgress = 0;
+            StatusMessage = "Loading your liked songs...";
+            LoadingStatusMessage = "Fetching your liked songs...";
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            // Get first page of saved tracks
+            var savedTracksResponse = await _spotifyClient.Library.GetTracks(cancellationToken);
+            var totalTracks = savedTracksResponse.Total ?? 0;
+            var allTracks = new ObservableCollection<FullTrack>();
+
+            // Initial progress update
+            LoadingProgress = totalTracks > 0 ? (int)(savedTracksResponse.Items!.Count * 100.0 / totalTracks) : 0;
+            LoadingStatusMessage = $"Loaded {savedTracksResponse.Items!.Count} of {totalTracks} tracks...";
+
+            // Process first batch of tracks
+            foreach (var item in savedTracksResponse.Items)
+            {
+                if (item.Track is FullTrack track)
+                {
+                    allTracks.Add(track);
+                }
+            }
+
+            // Handle pagination to get all tracks
+            while (savedTracksResponse.Next != null)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                savedTracksResponse = await _spotifyClient.NextPage(savedTracksResponse);
+
+                foreach (var item in savedTracksResponse.Items!)
+                {
+                    if (item.Track is FullTrack track)
+                    {
+                        allTracks.Add(track);
+                    }
+                }
+
+                // Update progress
+                LoadingProgress = (int)(allTracks.Count * 100.0 / totalTracks);
+                LoadingStatusMessage = $"Loaded {allTracks.Count} of {totalTracks} tracks...";
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            // Update UI with all tracks
+            Tracks = [.. allTracks];
+            StatusMessage = $"Loaded {allTracks.Count} liked songs";
+        }
+        catch (OperationCanceledException)
+        {
+            // Operation was canceled, no need to update UI
+        }
+        catch (Exception ex)
+        {
+            if (!cancellationToken.IsCancellationRequested)
+            {
+                StatusMessage = $"Failed to load liked songs: {ex.Message}";
+            }
+        }
+        finally
+        {
+            if (!cancellationToken.IsCancellationRequested)
+            {
+                IsLoadingTracks = false;
+            }
+        }
+    }
+
+    // Helper method to cancel ongoing operations
+    private void CancelOngoingOperations()
+    {
+        _currentLoadingCts?.Cancel();
+        _currentLoadingCts?.Dispose();
+        _currentLoadingCts = new CancellationTokenSource();
+    }
+
+    // Implement IDisposable
+    public void Dispose()
+    {
+        _currentLoadingCts?.Cancel();
+        _currentLoadingCts?.Dispose();
+        GC.SuppressFinalize(this);
     }
 }
