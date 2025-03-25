@@ -33,25 +33,25 @@ public partial class MainWindowViewModel : ViewModelBase
             }
         }
     }
-    
+
     public bool IsAuthenticated
     {
         get => _isAuthenticated;
         private set => this.RaiseAndSetIfChanged(ref _isAuthenticated, value);
     }
-    
+
     public bool IsAuthenticating
     {
         get => _isAuthenticating;
         private set => this.RaiseAndSetIfChanged(ref _isAuthenticating, value);
     }
-    
+
     public bool IsLoadingPlaylists
     {
         get => _isLoadingPlaylists;
         private set => this.RaiseAndSetIfChanged(ref _isLoadingPlaylists, value);
     }
-    
+
     public bool IsLoadingTracks
     {
         get => _isLoadingTracks;
@@ -75,7 +75,7 @@ public partial class MainWindowViewModel : ViewModelBase
         get => _statusMessage;
         private set => this.RaiseAndSetIfChanged(ref _statusMessage, value);
     }
-    
+
     public ObservableCollection<FullPlaylist> Playlists
     {
         get => _playlists;
@@ -87,9 +87,9 @@ public partial class MainWindowViewModel : ViewModelBase
         get => _tracks;
         private set => this.RaiseAndSetIfChanged(ref _tracks, value);
     }
-    
+
     public ICommand AuthenticateCommand { get; }
-    
+
     public MainWindowViewModel()
     {
         AuthenticateCommand = ReactiveCommand.CreateFromTask(AuthenticateSpotify);
@@ -99,20 +99,20 @@ public partial class MainWindowViewModel : ViewModelBase
             Task.Run(AuthenticateSpotify);
         }
     }
-    
+
     private async Task AuthenticateSpotify()
     {
         try
         {
             IsAuthenticating = true;
             StatusMessage = "Authenticating with Spotify...";
-            
+
             _spotifyClient = await SpotifyAuth.Authenticate();
-            
+
             var user = await _spotifyClient.UserProfile.Current();
             StatusMessage = $"Authenticated as {user.DisplayName}";
             IsAuthenticated = true;
-            
+
             // Fetch playlists after successful authentication
             await FetchUserPlaylists();
         }
@@ -126,21 +126,21 @@ public partial class MainWindowViewModel : ViewModelBase
             IsAuthenticating = false;
         }
     }
-    
+
     private async Task FetchUserPlaylists()
     {
         if (_spotifyClient == null) return;
 
         PrivateUser user = await _spotifyClient.UserProfile.Current();
-        
+
         try
         {
             IsLoadingPlaylists = true;
             StatusMessage = "Loading your playlists...";
-            
+
             var playlistsResponse = await _spotifyClient.Playlists.CurrentUsers();
             var allPlaylists = new ObservableCollection<FullPlaylist>();
-            
+
             // Add initial batch of playlists
             foreach (var playlist in playlistsResponse.Items!)
             {
@@ -148,7 +148,7 @@ public partial class MainWindowViewModel : ViewModelBase
                     allPlaylists.Add(playlist);
                 }
             }
-            
+
             // Handle pagination to get all playlists
             while (playlistsResponse.Next != null)
             {
@@ -158,7 +158,7 @@ public partial class MainWindowViewModel : ViewModelBase
                     allPlaylists.Add(playlist);
                 }
             }
-            
+
             Playlists = allPlaylists;
             StatusMessage = $"Loaded {allPlaylists.Count} playlists";
         }
@@ -174,7 +174,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private async Task FetchPlaylistTracks(FullPlaylist playlist){
         if (_spotifyClient == null) return;
-        
+
         try
         {
             IsLoadingTracks = true;
@@ -185,20 +185,20 @@ public partial class MainWindowViewModel : ViewModelBase
             if (playlistId == null) return;
 
             var totalTracks = playlist.Tracks?.Total ?? 0;
-            
+
             var tracksResponse = await _spotifyClient.Playlists.GetItems(playlistId);
             var allTracks = new ObservableCollection<FullTrack>();
 
             LoadingProgress = (int)(tracksResponse.Items!.Count * 100.0 / totalTracks);
             LoadingStatusMessage = $"Loaded {tracksResponse.Items.Count} of {totalTracks} tracks...";
-            
+
             // Add initial batch of tracks
             foreach (var track in tracksResponse.Items!)
             {
                 FullTrack fullTrack = (FullTrack)track.Track;
                 allTracks.Add(fullTrack);
             }
-            
+
             // Handle pagination to get all tracks
             while (tracksResponse.Next != null)
             {

@@ -18,7 +18,7 @@ namespace SpotifyPlaylistCleaner_DotNET.Converters
                 // Extract artist names and join them with the separator
                 return string.Join(Separator, artists.Select(a => a.Name));
             }
-            
+
             return string.Empty;
         }
 

@@ -13,7 +13,7 @@ namespace SpotifyPlaylistCleaner_DotNET.Converters
             if (values.Count >= 2 && values[0] is IList items && values[1] != null)
             {
                 int index = items.IndexOf(values[1]) + 1; // +1 for 1-based indexing
-                return index.ToString("D2"); // Format as 01, 02, etc.
+                return index.ToString();
             }
             return "??";
         }
