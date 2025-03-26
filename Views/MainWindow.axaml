@@ -12,17 +12,14 @@
         Title="Spotify Playlist Cleaner"
         Background="#121212">
 
-    <Window.Resources>
-    </Window.Resources>
-
-    <Design.DataContext>
+  <Design.DataContext>
         <vm:MainWindowViewModel />
     </Design.DataContext>
 
     <Grid RowDefinitions="Auto,*">
         <!-- Header -->
-        <Border Grid.Row="0" Grid.ColumnSpan="2" Background="#1DB954" Padding="15" BoxShadow="0 1 10 0 #20000000">
-            <Grid ColumnDefinitions="Auto,*,Auto">
+        <Border Grid.Row="0" Grid.ColumnSpan="2" Background="#1DB954" Padding="{OnFormFactor Default='20,20,20,20', Mobile='10,10,10,10'}" BoxShadow="0 1 10 0 #20000000">
+          <Grid ColumnDefinitions="Auto,*,Auto">
                 <!-- App Title (Left) -->
                 <StackPanel Orientation="Horizontal" Grid.Column="0" Spacing="10" VerticalAlignment="Center">
                     <TextBlock Text="Spotify Playlist Cleaner" FontSize="20" FontWeight="Bold" Foreground="White" />
@@ -38,42 +35,68 @@
                 </Grid>
 
                 <!-- Right side controls -->
-                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10">
-                    <!-- Refresh Cache Button -->
-                    <Button Command="{Binding RefreshTracksCommand}"
-                            CommandParameter="{Binding SelectedPlaylist, Converter={x:Static ObjectConverters.IsNull}}"
-                            IsEnabled="{Binding IsAuthenticated}"
-                            ToolTip.Tip="Refresh Tracks"
-                            Padding="10,5"
-                            Background="#121212"
-                            Foreground="White">
-                        <StackPanel Orientation="Horizontal" Spacing="5">
-                            <Path
-                                Data="M17.65,6.35C16.2,4.9 14.21,4 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20A8,8 0 0,0 20,12H18A6,6 0 0,1 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z"
-                                Fill="White"
-                                Width="16"
-                                Height="16"
-                                Stretch="Uniform" />
-                            <TextBlock Text="Refresh Tracks" />
-                        </StackPanel>
-                    </Button>
+                <Panel Grid.Column="2">
+                    <!-- Desktop layout (horizontal) -->
+                    <StackPanel Orientation="Horizontal" Spacing="10" IsVisible="{OnFormFactor Default=true, Mobile=false}">
+                        <!-- Refresh Cache Button -->
+                        <Button Command="{Binding RefreshTracksCommand}"
+                                CommandParameter="{Binding SelectedPlaylist, Converter={x:Static ObjectConverters.IsNull}}"
+                                IsEnabled="{Binding IsAuthenticated}"
+                                ToolTip.Tip="Refresh Tracks"
+                                Padding="10,5"
+                                Background="#121212"
+                                Foreground="White">
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                <Path Data="M17.65,6.35C16.2,4.9 14.21,4 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20A8,8 0 0,0 20,12H18A6,6 0 0,1 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z"
+                                      Fill="White" Width="16" Height="16" Stretch="Uniform" />
+                                <TextBlock Text="Refresh Tracks" />
+                            </StackPanel>
+                        </Button>
 
-                    <!-- Login Button (existing) -->
-                    <Button Content="Login with Spotify"
-                            Command="{Binding AuthenticateCommand}"
-                            IsEnabled="{Binding !IsAuthenticating}"
-                            IsVisible="{Binding !IsAuthenticated}"
-                            Padding="10,5"
-                            Background="#121212"
-                            Foreground="White" />
-                </StackPanel>
+                        <!-- Login Button -->
+                        <Button Content="Login with Spotify"
+                                Command="{Binding AuthenticateCommand}"
+                                IsEnabled="{Binding !IsAuthenticating}"
+                                IsVisible="{Binding !IsAuthenticated}"
+                                Padding="10,5"
+                                Background="#121212"
+                                Foreground="White" />
+                    </StackPanel>
+
+                    <!-- Mobile layout (vertical) -->
+                    <StackPanel Orientation="Vertical" Spacing="5" IsVisible="{OnFormFactor Default=false, Mobile=true}">
+                        <!-- Refresh Cache Button -->
+                        <Button Command="{Binding RefreshTracksCommand}"
+                                CommandParameter="{Binding SelectedPlaylist, Converter={x:Static ObjectConverters.IsNull}}"
+                                IsEnabled="{Binding IsAuthenticated}"
+                                ToolTip.Tip="Refresh Tracks"
+                                Padding="10,5"
+                                Background="#121212"
+                                Foreground="White">
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                <Path Data="M17.65,6.35C16.2,4.9 14.21,4 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20A8,8 0 0,0 20,12H18A6,6 0 0,1 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z"
+                                      Fill="White" Width="16" Height="16" Stretch="Uniform" />
+                                <TextBlock Text="Refresh Tracks" />
+                            </StackPanel>
+                        </Button>
+
+                        <!-- Login Button -->
+                        <Button Content="Login with Spotify"
+                                Command="{Binding AuthenticateCommand}"
+                                IsEnabled="{Binding !IsAuthenticating}"
+                                IsVisible="{Binding !IsAuthenticated}"
+                                Padding="10,5"
+                                Background="#121212"
+                                Foreground="White" />
+                    </StackPanel>
+                </Panel>
             </Grid>
         </Border>
 
         <!-- Content area with sidebar and main content -->
-        <Grid Grid.Row="1" ColumnDefinitions="250,*" HorizontalAlignment="Stretch">
+        <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,*" HorizontalAlignment="Stretch">
             <!-- Sidebar -->
-            <Border Grid.Column="0" Background="#212121" Padding="10">
+            <Border Grid.Column="0" Background="#212121" Padding="{OnFormFactor Default='10,10,10,10', Mobile='5,5,5,5'}" MinWidth="{OnFormFactor Default='150', Mobile='100'}" Width="{OnFormFactor Default='250', Mobile='200'}">
                 <DockPanel>
                     <TextBlock DockPanel.Dock="Top" Text="Your Playlists" FontSize="16" FontWeight="SemiBold"
                                Margin="0,0,0,10" Foreground="White" />
@@ -116,13 +139,17 @@
                 </DockPanel>
             </Border>
 
+            <GridSplitter Grid.Column="1" Width="5" Background="#333333" ResizeDirection="Columns" />
+
             <!-- Main Content Area -->
-            <Border Grid.Column="1" Background="#121212" Padding="20">
+            <Border Grid.Column="2" Background="#121212" Padding="{OnFormFactor Default='20,20,20,20', Mobile='10,10,10,10'}">
                 <Grid RowDefinitions="Auto,*">
                     <!-- Content Header - Show selected playlist name -->
                     <TextBlock Grid.Row="0"
                                Text="{Binding SelectedPlaylist.Name, FallbackValue='Select a playlist to clean'}"
-                               FontSize="24"
+                               FontSize="{OnFormFactor Default='24', Mobile='20'}"
+                               TextTrimming="CharacterEllipsis"
+                               TextWrapping="NoWrap"
                                FontWeight="Bold"
                                Margin="0,0,0,20"
                                Foreground="White"
@@ -141,9 +168,20 @@
                                    TextWrapping="Wrap" />
 
                         <!-- Actions and Search -->
-                        <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,*" Margin="0,0,0,15">
-                            <!-- Action Buttons (Left) -->
-                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10">
+                        <Grid Grid.Row="1" Margin="0,0,0,15">
+                          <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="{OnFormFactor Default='Auto', Mobile='*'}" />
+                            <ColumnDefinition Width="{OnFormFactor Default='Auto', Mobile='0'}" />
+                            <ColumnDefinition Width="{OnFormFactor Default='*', Mobile='0'}" />
+                          </Grid.ColumnDefinitions>
+                          <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="{OnFormFactor Default='0', Mobile='Auto'}" />
+                          </Grid.RowDefinitions>
+                          <!-- Action Buttons (Left) -->
+                            <Panel Grid.Column="0" Grid.Row="0">
+                              <!-- Desktop layout (horizontal) -->
+                              <StackPanel Orientation="Horizontal" Spacing="10" IsVisible="{OnFormFactor Default=true, Mobile=false}">
                                 <Button Content="Remove Duplicates"
                                         Background="#1DB954"
                                         Foreground="White"
@@ -153,16 +191,34 @@
                                         Background="#333333"
                                         Foreground="White"
                                         Padding="15,8" />
-                            </StackPanel>
+                              </StackPanel>
+
+                              <!-- Mobile layout (vertical) -->
+                              <StackPanel Orientation="Vertical" Spacing="5" IsVisible="{OnFormFactor Default=false, Mobile=true}">
+                                <Button Content="Remove Duplicates"
+                                        Background="#1DB954"
+                                        Foreground="White"
+                                        Padding="15,8"
+                                        HorizontalAlignment="Stretch" />
+                                <Button Content="Reset Filters"
+                                        Command="{Binding ResetFiltersCommand}"
+                                        Background="#333333"
+                                        Foreground="White"
+                                        Padding="15,8"
+                                        HorizontalAlignment="Stretch" />
+                              </StackPanel>
+                            </Panel>
 
                             <!-- Spacer (To separate buttons from search) -->
-                            <Border Grid.Column="1" Width="20" />
+                            <Border Grid.Column="1" Grid.Row="0" Width="20" IsVisible="{OnFormFactor Default=true, Mobile=false}" />
 
                             <!-- Search Bar (Right) -->
-                            <Border Grid.Column="2"
+                            <Border Grid.Column="{OnFormFactor Default='2', Mobile='0'}"
+                                    Grid.Row="{OnFormFactor Default='0', Mobile='1'}"
                                     Background="#333333"
                                     CornerRadius="4"
-                                    Height="34">
+                                    Height="34"
+                                    Margin="{OnFormFactor Default='0', Mobile='0,10,0,0'}">
                                 <Grid ColumnDefinitions="Auto,*">
                                     <!-- Search Icon -->
                                     <Path Grid.Column="0"
@@ -256,7 +312,7 @@
                                   IsVisible="{Binding !IsLoadingTracks}">
                             <DataGrid.Columns>
                                 <!-- Index Column -->
-                                <DataGridTemplateColumn Header="#" Width="60" SortMemberPath="DisplayIndex">
+                                <DataGridTemplateColumn Header="#" Width="Auto" MinWidth="40" SortMemberPath="DisplayIndex">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate x:DataType="vm:TrackItemViewModel">
                                             <TextBlock Text="{Binding DisplayIndex}"
@@ -269,7 +325,7 @@
                                 </DataGridTemplateColumn>
 
                                 <!-- Album art Column -->
-                                <DataGridTemplateColumn Header="" Width="60">
+                                <DataGridTemplateColumn Header="" Width="Auto" MinWidth="50">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate x:DataType="vm:TrackItemViewModel">
                                             <Border Width="40" Height="40" Background="#333333" CornerRadius="4"
@@ -291,27 +347,23 @@
                                 </DataGridTemplateColumn>
 
                                 <!-- Track Name Column -->
-                                <DataGridTemplateColumn Header="Title" Width="*" SortMemberPath="Name">
+                                <DataGridTemplateColumn Header="Title" Width="*" MinWidth="120" SortMemberPath="Name">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate x:DataType="vm:TrackItemViewModel">
                                             <StackPanel VerticalAlignment="Center" Margin="0,5">
                                                 <StackPanel Orientation="Horizontal" Spacing="5">
-                                                    <TextBlock Text="{Binding Name}" Foreground="White" />
-                                                    <Border Background="#333333" CornerRadius="2" Padding="3,3"
-                                                            IsVisible="{Binding Explicit}">
+                                                    <TextBlock Text="{Binding Name}" Foreground="White" FontSize="{OnFormFactor Default='14', Mobile='13'}" />
+                                                    <Border Background="#333333" CornerRadius="2" Padding="3,3" IsVisible="{Binding Explicit}">
                                                         <TextBlock Text="Explicit" FontSize="10" Foreground="#B3B3B3" />
                                                     </Border>
-                                                    <Border Background="#333333" CornerRadius="2" Padding="3,3"
-                                                            IsVisible="{Binding IsLocal}">
+                                                    <Border Background="#333333" CornerRadius="2" Padding="3,3" IsVisible="{Binding IsLocal}">
                                                         <TextBlock Text="Local" FontSize="10" Foreground="#B3B3B3" />
                                                     </Border>
-                                                    <Border Background="#333333" CornerRadius="2" Padding="3,3"
-                                                            IsVisible="{Binding !IsPlayable}">
-                                                        <TextBlock Text="Not Playable" FontSize="10"
-                                                                   Foreground="#B3B3B3" />
+                                                    <Border Background="#333333" CornerRadius="2" Padding="3,3" IsVisible="{Binding !IsPlayable}">
+                                                        <TextBlock Text="Not Playable" FontSize="{OnFormFactor Default='10', Mobile='9'}" Foreground="#B3B3B3" />
                                                     </Border>
                                                 </StackPanel>
-                                                <TextBlock Foreground="#B3B3B3" FontSize="12">
+                                                <TextBlock Foreground="#B3B3B3" FontSize="{OnFormFactor Default='12', Mobile='11'}">
                                                     <TextBlock.Text>
                                                         <MultiBinding StringFormat="{}{0}">
                                                             <Binding Path="Artists">
@@ -329,7 +381,7 @@
                                 </DataGridTemplateColumn>
 
                                 <!-- Duration Column -->
-                                <DataGridTemplateColumn Header="Duration" Width="100" SortMemberPath="Duration">
+                                <DataGridTemplateColumn Header="Duration" Width="Auto" MinWidth="80" SortMemberPath="Duration">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate x:DataType="vm:TrackItemViewModel">
                                             <TextBlock Text="{Binding Duration}"
