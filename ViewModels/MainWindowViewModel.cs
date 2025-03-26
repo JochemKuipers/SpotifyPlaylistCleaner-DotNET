@@ -65,8 +65,9 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         {
             WriteIndented = false,
             ReferenceHandler = ReferenceHandler.IgnoreCycles,
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-            Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
+            DefaultIgnoreCondition = JsonIgnoreCondition.Never,
+            IncludeFields = true,
+            PropertyNameCaseInsensitive = true
         };
     }
 
@@ -91,14 +92,12 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
             IEnumerable<TrackItemViewModel> filteredItems = _trackItems;
 
             // Apply search filtering
-            if (!string.IsNullOrWhiteSpace(SearchQuery))
-            {
-                var search = SearchQuery.Trim().ToLower();
-                filteredItems = filteredItems.Where(t =>
-                    t.Name != null && (t.Name.Contains(search, StringComparison.CurrentCultureIgnoreCase) ||
-                                       t.Artists.Any(a =>
-                                           a.Name.Contains(search, StringComparison.CurrentCultureIgnoreCase))));
-            }
+            if (string.IsNullOrWhiteSpace(SearchQuery)) return filteredItems;
+            var search = SearchQuery.Trim().ToLower();
+            filteredItems = filteredItems.Where(t =>
+                t.Name.Contains(search, StringComparison.CurrentCultureIgnoreCase) ||
+                t.Artists.Any(a =>
+                    a.Name.Contains(search, StringComparison.CurrentCultureIgnoreCase)));
 
             return filteredItems;
         }
@@ -208,6 +207,18 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         GC.SuppressFinalize(this);
     }
 
+    // Add this method to your MainWindowViewModel class
+    private void VerifyTrackProperties()
+    {
+        // Add some debugging output to see what's happening with IsPlayable values
+        var notPlayableTracks = Tracks.Where(t => !t.IsPlayable).ToList();
+        Console.WriteLine($"Found {notPlayableTracks.Count} tracks marked as not playable");
+
+        // Output details of the first few not playable tracks for debugging
+        foreach (var track in notPlayableTracks.Take(3))
+            Console.WriteLine($"Not playable track: {track.Name} by {track.Artists[0].Name}, IsLocal: {track.IsLocal}");
+    }
+
     private void ResetFilters()
     {
         SearchQuery = string.Empty;
@@ -313,105 +324,128 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
 
         var cancellationToken = _currentLoadingCts?.Token ?? CancellationToken.None;
 
-        // Try loading from cache first
-        var cachedTracks = await TryLoadTracksFromCacheAsync(playlist.Id, cancellationToken);
-        if (IsCacheEnabled && cachedTracks.Count > 0)
+        try
         {
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                _trackItems.Clear();
-                for (var i = 0; i < cachedTracks.Count; i++)
-                    _trackItems.Add(new TrackItemViewModel(cachedTracks[i], i + 1));
+                Tracks.Clear();
+                IsLoadingTracks = true;
+                LoadingProgress = 0;
+                StatusMessage = $"Loading tracks for playlist '{playlist.Name}'...";
+                LoadingStatusMessage = "Fetching playlist tracks...";
             });
 
-            StatusMessage = $"Loaded {cachedTracks.Count} tracks from cache";
-            this.RaisePropertyChanged(nameof(FilteredTracks));
-            return;
-        }
+            var cachedTracks = await TryLoadTracksFromCacheAsync(playlist.Id, cancellationToken);
+            if (IsCacheEnabled && cachedTracks.Count > 0)
+            {
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    Tracks = new ObservableCollection<FullTrack>(cachedTracks);
+                    StatusMessage = $"Loaded {cachedTracks.Count} tracks from cache";
+                    IsLoadingTracks = false;
+                });
+                return;
+            }
 
-        try
-        {
-            IsLoadingTracks = true;
-            LoadingProgress = 0;
-            LoadingStatusMessage = "Loading tracks...";
-            _trackItems.Clear(); // Clear existing tracks
+            var user = await _spotifyClient.UserProfile.Current(cancellationToken);
 
             cancellationToken.ThrowIfCancellationRequested();
 
-            // Get total tracks count for progress calculation
-            if (playlist.Tracks != null)
+            var initialRequest = new PlaylistGetItemsRequest
             {
-                var totalTracks = playlist.Tracks.Total;
-                var tracksLoaded = 0;
+                Limit = 100,
+                Market = user.Country
+            };
+            var initialResponse =
+                await _spotifyClient.Playlists.GetItems(playlist.Id, initialRequest, cancellationToken);
+            var totalTracks = initialResponse.Total ?? 0;
 
-                // Initial fetch
-                var tracks = await _spotifyClient.Playlists.GetItems(playlist.Id, cancellationToken);
-                if (tracks.Items != null)
+            if (totalTracks == 0)
+            {
+                await Dispatcher.UIThread.InvokeAsync(() =>
                 {
-                    var allTracks = new List<PlaylistTrack<IPlayableItem>>(tracks.Items);
+                    Tracks = [];
+                    StatusMessage = "No tracks found in the playlist";
+                    IsLoadingTracks = false;
+                });
+                return;
+            }
 
-                    // Update progress after initial fetch
-                    tracksLoaded += tracks.Items.Count;
-                    var progress = (int)((double)tracksLoaded / totalTracks * 100)!;
+            const int maxConcurrentRequests = 25;
 
-                    // Update UI using dispatcher
-                    await Dispatcher.UIThread.InvokeAsync(() =>
-                    {
-                        LoadingProgress = progress;
-                        LoadingStatusMessage = $"Loaded {tracksLoaded} of {totalTracks} tracks...";
-                    });
+            var allTracks = new List<FullTrack>();
+            var progressLock = new object();
 
-                    // Continue fetching if there are more tracks
-                    while (tracks.Next != null)
+            foreach (var item in initialResponse.Items!)
+                if (item.Track is FullTrack track)
+                    allTracks.Add(track);
+
+            var loadedCount = initialResponse.Items!.Count;
+            LoadingProgress = (int)(loadedCount * 100.0 / totalTracks);
+            LoadingStatusMessage = $"Loaded {loadedCount} of {totalTracks} tracks...";
+
+            var tasks = new List<Task>();
+
+            for (var offset = 100; offset < totalTracks; offset += 100)
+            {
+                if (tasks.Count >= maxConcurrentRequests)
+                {
+                    await Task.WhenAny(tasks);
+                    tasks.RemoveAll(t => t.IsCompleted);
+                }
+
+                var currentOffset = offset;
+
+                var task = Task.Run(async () =>
+                {
+                    try
                     {
                         cancellationToken.ThrowIfCancellationRequested();
 
-                        // Get next page of tracks
-                        tracks = await _spotifyClient.NextPage(tracks);
-                        if (tracks.Items != null)
+                        var request = new PlaylistGetItemsRequest
                         {
-                            allTracks.AddRange(tracks.Items);
+                            Market = user.Country,
+                            Limit = 100,
+                            Offset = currentOffset
+                        };
 
-                            // Update progress
-                            tracksLoaded += tracks.Items.Count;
+                        var response = await _spotifyClient.Playlists.GetItems(playlist.Id, request, cancellationToken);
+
+                        var batchTracks = new List<FullTrack>();
+                        foreach (var item in response.Items!)
+                            if (item.Track is FullTrack track)
+                                batchTracks.Add(track);
+
+                        lock (progressLock)
+                        {
+                            allTracks.AddRange(batchTracks);
+                            loadedCount += batchTracks.Count;
+                            LoadingProgress = (int)(loadedCount * 100.0 / totalTracks);
+                            LoadingStatusMessage = $"Loaded {loadedCount} of {totalTracks} tracks...";
                         }
-
-                        progress = (int)((double)tracksLoaded / totalTracks * 100)!;
-
-                        // Update UI using dispatcher
-                        await Dispatcher.UIThread.InvokeAsync(() =>
-                        {
-                            LoadingProgress = progress;
-                            LoadingStatusMessage = $"Loaded {tracksLoaded} of {totalTracks} tracks...";
-                        });
                     }
-
-                    cancellationToken.ThrowIfCancellationRequested();
-
-                    // Extract FullTracks from the playlist tracks
-                    var fullTracks = new ObservableCollection<FullTrack>();
-                    foreach (var item in allTracks)
-                        if (item.Track is FullTrack track)
-                            fullTracks.Add(track);
-
-                    // Save to cache if enabled
-                    if (IsCacheEnabled)
-                        await SaveTracksToCacheAsync(playlist.Id, fullTracks, cancellationToken);
-
-                    // Process and set tracks using dispatcher
-                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    catch (Exception ex) when (ex is not OperationCanceledException)
                     {
-                        // Process and add all tracks to the observable collection
-                        _trackItems.Clear();
-                        for (var i = 0; i < fullTracks.Count; i++)
-                            _trackItems.Add(new TrackItemViewModel(fullTracks[i], i + 1));
+                        Console.WriteLine($"Error fetching batch at offset {currentOffset}: {ex.Message}");
+                    }
+                }, cancellationToken);
 
-                        IsLoadingTracks = false;
-                        LoadingStatusMessage = $"Loaded {_trackItems.Count} tracks";
-                        this.RaisePropertyChanged(nameof(FilteredTracks));
-                    });
-                }
+                tasks.Add(task);
             }
+
+            await Task.WhenAll(tasks);
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                Tracks = new ObservableCollection<FullTrack>(allTracks);
+                StatusMessage = $"Loaded {allTracks.Count} tracks";
+                IsLoadingTracks = false;
+                this.RaisePropertyChanged(nameof(FilteredTracks));
+            });
+
+            if (IsCacheEnabled) await SaveTracksToCacheAsync(playlist.Id, Tracks, cancellationToken);
         }
         catch (OperationCanceledException)
         {
@@ -419,18 +453,11 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         }
         catch (Exception ex)
         {
-            if (!cancellationToken.IsCancellationRequested)
-                // Handle error on UI thread
-                await Dispatcher.UIThread.InvokeAsync(() =>
-                {
-                    StatusMessage = $"Error fetching tracks: {ex.Message}";
-                    IsLoadingTracks = false;
-                });
+            if (!cancellationToken.IsCancellationRequested) StatusMessage = $"Failed to load tracks: {ex.Message}";
         }
         finally
         {
-            if (!cancellationToken.IsCancellationRequested)
-                await Dispatcher.UIThread.InvokeAsync(() => IsLoadingTracks = false);
+            if (!cancellationToken.IsCancellationRequested) IsLoadingTracks = false;
         }
     }
 
@@ -440,24 +467,30 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
 
         var cancellationToken = _currentLoadingCts?.Token ?? CancellationToken.None;
 
-        var cachedTracks = await TryLoadLikedTracksFromCacheAsync(cancellationToken);
-        if (IsCacheEnabled && cachedTracks.Count > 0)
-        {
-            Tracks = cachedTracks;
-            StatusMessage = $"Loaded {cachedTracks.Count} liked songs from cache";
-            return;
-        }
-
         try
         {
-            Tracks.Clear();
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                Tracks.Clear();
+                IsLoadingTracks = true;
+                LoadingProgress = 0;
+                StatusMessage = "Loading your liked songs...";
+                LoadingStatusMessage = "Fetching your liked songs...";
+            });
+
+            var cachedTracks = await TryLoadLikedTracksFromCacheAsync(cancellationToken);
+            if (IsCacheEnabled && cachedTracks.Count > 0)
+            {
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    Tracks = new ObservableCollection<FullTrack>(cachedTracks);
+                    StatusMessage = $"Loaded {cachedTracks.Count} liked songs from cache";
+                    IsLoadingTracks = false;
+                });
+                return;
+            }
 
             var user = await _spotifyClient.UserProfile.Current(cancellationToken);
-
-            IsLoadingTracks = true;
-            LoadingProgress = 0;
-            StatusMessage = "Loading your liked songs...";
-            LoadingStatusMessage = "Fetching your liked songs...";
 
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -467,8 +500,12 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
 
             if (totalTracks == 0)
             {
-                Tracks = [];
-                StatusMessage = "No liked songs found";
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    Tracks = [];
+                    StatusMessage = "No liked songs found";
+                    IsLoadingTracks = false;
+                });
                 return;
             }
 
@@ -538,10 +575,13 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
 
             cancellationToken.ThrowIfCancellationRequested();
 
-            Tracks = [.. allTracks];
-            StatusMessage = $"Loaded {allTracks.Count} liked songs";
-
-            this.RaisePropertyChanged(nameof(FilteredTracks));
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                Tracks = new ObservableCollection<FullTrack>(allTracks);
+                StatusMessage = $"Loaded {allTracks.Count} liked songs";
+                IsLoadingTracks = false;
+                this.RaisePropertyChanged(nameof(FilteredTracks));
+            });
 
             if (IsCacheEnabled) await SaveLikedTracksToCacheAsync(Tracks, cancellationToken);
         }
@@ -560,7 +600,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     }
 
 
-    // Cache helper methods
+// Cache helper methods
     private async Task<ObservableCollection<FullTrack>> TryLoadTracksFromCacheAsync(string playlistId,
         CancellationToken cancellationToken)
     {
@@ -595,11 +635,8 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
             var cachedTracks = JsonSerializer.Deserialize<List<FullTrack>>(json, _jsonOptions);
             if (cachedTracks is { Count: > 0 })
                 foreach (var track in cachedTracks.OfType<FullTrack>())
-                {
                     // Ensure required properties are initialized
-                    track.IsPlayable = true;
                     tracks.Add(track);
-                }
         }
         catch (Exception ex)
         {
@@ -652,11 +689,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
             var cachedTracks = JsonSerializer.Deserialize<List<FullTrack>>(json, _jsonOptions);
             if (cachedTracks is { Count: > 0 })
                 foreach (var track in cachedTracks.OfType<FullTrack>())
-                {
-                    // Ensure required properties are initialized
-                    track.IsPlayable = true;
                     tracks.Add(track);
-                }
         }
         catch (Exception ex)
         {
@@ -681,12 +714,14 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         try
         {
             var cacheFile = Path.Combine(_cacheFolder, $"playlist_{playlistId}.json");
-            var json = JsonSerializer.Serialize(tracks.ToList(), _jsonOptions);
+            var tracksCopy = tracks.ToList();
+            var json = JsonSerializer.Serialize(tracksCopy, _jsonOptions);
             await File.WriteAllTextAsync(cacheFile, json, cancellationToken);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Cache saving error: {ex.Message}");
+            await Dispatcher.UIThread.InvokeAsync(() =>
+                Console.WriteLine($"Cache saving error: {ex.Message}"));
         }
     }
 
@@ -701,7 +736,8 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Cache saving error: {ex.Message}");
+            await Dispatcher.UIThread.InvokeAsync(() =>
+                Console.WriteLine($"Cache saving error: {ex.Message}"));
         }
     }
 
@@ -735,10 +771,11 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
 
                 // Restore cache setting after refresh
                 IsCacheEnabled = temp;
+                return Task.CompletedTask;
             });
     }
 
-    // Helper method to cancel ongoing operations
+// Helper method to cancel ongoing operations
     private void CancelOngoingOperations()
     {
         _currentLoadingCts?.Cancel();
