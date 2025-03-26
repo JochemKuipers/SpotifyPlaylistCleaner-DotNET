@@ -18,19 +18,16 @@ namespace SpotifyPlaylistCleaner_DotNET.ViewModels;
 
 public class MainWindowViewModel : ViewModelBase, IDisposable
 {
-    // Add these properties for cache management
     private readonly string _cacheFolder = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "SpotifyPlaylistCleaner");
 
-    private readonly TimeSpan _cacheTtl = TimeSpan.FromHours(24); // Cache valid for 24 hours
+    private readonly TimeSpan _cacheTtl = TimeSpan.FromHours(24);
 
-    // Add this field to your class
     private readonly JsonSerializerOptions _jsonOptions;
 
     private readonly ObservableCollection<TrackItemViewModel> _trackItems = [];
 
-    // Add a CancellationTokenSource for managing API requests
     private CancellationTokenSource? _currentLoadingCts;
     private bool _isAuthenticated;
     private bool _isAuthenticating;
@@ -39,8 +36,6 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     private int _loadingProgress;
     private string _loadingStatusMessage = "";
     private ObservableCollection<FullPlaylist> _playlists = [];
-
-    // Add these properties to your MainWindowViewModel class
 
     private string _searchQuery = "";
     private FullPlaylist? _selectedPlaylist;
@@ -60,7 +55,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         // Create cache directory if it doesn't exist
         if (!Directory.Exists(_cacheFolder)) Directory.CreateDirectory(_cacheFolder);
 
-        // Create JSON serializer options once
+        // Create JSON serializer options
         _jsonOptions = new JsonSerializerOptions
         {
             WriteIndented = false,
@@ -71,7 +66,6 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         };
     }
 
-    // New property for cache status
     private bool IsCacheEnabled { get; set; } = true;
 
     public string SearchQuery
@@ -111,7 +105,6 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
             this.RaiseAndSetIfChanged(ref _selectedPlaylist, value);
 
             if (value == null) return;
-            // Cancel any ongoing track loading operations
             CancelOngoingOperations();
 
             Task.Run(async () =>
@@ -199,24 +192,11 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
 
     public ICommand ResetFiltersCommand { get; }
 
-    // Implement IDisposable
     public void Dispose()
     {
         _currentLoadingCts?.Cancel();
         _currentLoadingCts?.Dispose();
         GC.SuppressFinalize(this);
-    }
-
-    // Add this method to your MainWindowViewModel class
-    private void VerifyTrackProperties()
-    {
-        // Add some debugging output to see what's happening with IsPlayable values
-        var notPlayableTracks = Tracks.Where(t => !t.IsPlayable).ToList();
-        Console.WriteLine($"Found {notPlayableTracks.Count} tracks marked as not playable");
-
-        // Output details of the first few not playable tracks for debugging
-        foreach (var track in notPlayableTracks.Take(3))
-            Console.WriteLine($"Not playable track: {track.Name} by {track.Artists[0].Name}, IsLocal: {track.IsLocal}");
     }
 
     private void ResetFilters()
@@ -317,7 +297,6 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    // Modify your track loading method in MainWindowViewModel.cs
     private async Task FetchPlaylistTracks(FullPlaylist playlist)
     {
         if (_spotifyClient == null || playlist.Id == null) return;
@@ -635,7 +614,6 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
             var cachedTracks = JsonSerializer.Deserialize<List<FullTrack>>(json, _jsonOptions);
             if (cachedTracks is { Count: > 0 })
                 foreach (var track in cachedTracks.OfType<FullTrack>())
-                    // Ensure required properties are initialized
                     tracks.Add(track);
         }
         catch (Exception ex)
