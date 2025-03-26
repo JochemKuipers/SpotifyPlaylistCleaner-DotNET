@@ -95,16 +95,17 @@
                                     <Border Width="40" Height="40" Background="#333333" CornerRadius="4">
                                         <Panel>
                                             <!-- Show the first letter as fallback -->
-                                            <TextBlock Text="{Binding Name[0]}"
+                                            <TextBlock Text="{Binding Name[0], FallbackValue='?'}"
                                                        VerticalAlignment="Center"
                                                        HorizontalAlignment="Center"
                                                        Foreground="White"
                                                        FontWeight="Bold" />
 
                                             <!-- Show image if available, it will overlay the text -->
-                                            <Image asyncImage:ImageLoader.Source="{Binding Images[0].Url}"
-                                                   Stretch="UniformToFill"
-                                                   IsVisible="{Binding Images, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                            <Image
+                                                asyncImage:ImageLoader.Source="{Binding Images[0].Url, FallbackValue=''}"
+                                                Stretch="UniformToFill"
+                                                IsVisible="{Binding Images, Converter={x:Static ObjectConverters.IsNotNull}}" />
                                         </Panel>
                                     </Border>
                                     <TextBlock Text="{Binding Name}" VerticalAlignment="Center" Foreground="White" />
@@ -147,7 +148,8 @@
                                         Background="#1DB954"
                                         Foreground="White"
                                         Padding="15,8" />
-                                <Button Content="Sort Tracks"
+                                <Button Content="Reset Filters"
+                                        Command="{Binding ResetFiltersCommand}"
                                         Background="#333333"
                                         Foreground="White"
                                         Padding="15,8" />
@@ -239,85 +241,131 @@
                         </Grid>
 
                         <!-- Track List - Show when not loading -->
-                        <ListBox Grid.Row="2"
-                                 ItemsSource="{Binding FilteredTracks}"
-                                 Background="Transparent"
-                                 Padding="0"
-                                 ScrollViewer.VerticalScrollBarVisibility="Auto"
-                                 IsVisible="{Binding !IsLoadingTracks}">
-                            <!-- Keep your existing ListBox.ItemTemplate -->
-                            <ListBox.ItemTemplate>
-                                <DataTemplate x:DataType="vm:TrackItemViewModel">
-                                    <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,5">
-                                        <!-- Track number/index -->
-                                        <Border Width="50" Height="40" VerticalAlignment="Center">
-                                            <TextBlock Foreground="#B3B3B3"
+                        <DataGrid Grid.Row="2"
+                                  ItemsSource="{Binding FilteredTracks}"
+                                  Background="Transparent"
+                                  RowBackground="Transparent"
+                                  GridLinesVisibility="None"
+                                  BorderThickness="0"
+                                  IsReadOnly="True"
+                                  AutoGenerateColumns="False"
+                                  CanUserReorderColumns="True"
+                                  CanUserResizeColumns="True"
+                                  CanUserSortColumns="True"
+                                  ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                  IsVisible="{Binding !IsLoadingTracks}">
+                            <DataGrid.Columns>
+                                <!-- Index Column -->
+                                <DataGridTemplateColumn Header="#" Width="60" SortMemberPath="DisplayIndex">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate x:DataType="vm:TrackItemViewModel">
+                                            <TextBlock Text="{Binding DisplayIndex}"
+                                                       Foreground="#B3B3B3"
                                                        VerticalAlignment="Center"
                                                        HorizontalAlignment="Center"
-                                                       FontSize="14">
-                                                <TextBlock Text="{Binding DisplayIndex}" />
-                                            </TextBlock>
-                                        </Border>
+                                                       FontSize="14" />
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
 
-                                        <!-- Album art (existing) -->
-                                        <Border Width="40" Height="40" Background="#333333" CornerRadius="4">
-                                            <Panel>
-                                                <!-- Show the first letter as fallback -->
-                                                <TextBlock Text="{Binding Name[0]}"
-                                                           VerticalAlignment="Center"
-                                                           HorizontalAlignment="Center"
-                                                           Foreground="White"
-                                                           FontWeight="Bold" />
+                                <!-- Album art Column -->
+                                <DataGridTemplateColumn Header="" Width="60">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate x:DataType="vm:TrackItemViewModel">
+                                            <Border Width="40" Height="40" Background="#333333" CornerRadius="4"
+                                                    Margin="5,0">
+                                                <Panel>
+                                                    <TextBlock Text="{Binding Name[0], FallbackValue='?'}"
+                                                               VerticalAlignment="Center"
+                                                               HorizontalAlignment="Center"
+                                                               Foreground="White"
+                                                               FontWeight="Bold" />
+                                                    <Image
+                                                        asyncImage:ImageLoader.Source="{Binding Album.Images[0].Url}"
+                                                        Stretch="UniformToFill"
+                                                        IsVisible="{Binding Album.Images, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                                </Panel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
 
-                                                <!-- Show image if available, it will overlay the text -->
-                                                <Image asyncImage:ImageLoader.Source="{Binding Album.Images[0].Url}"
-                                                       Stretch="UniformToFill"
-                                                       IsVisible="{Binding Album.Images, Converter={x:Static ObjectConverters.IsNotNull}}" />
-                                            </Panel>
-                                        </Border>
-
-                                        <!-- Rest of your track item template remains the same -->
-                                        <StackPanel VerticalAlignment="Center">
-                                            <StackPanel Orientation="Horizontal" Spacing="5">
-                                                <TextBlock Text="{Binding Name}" Foreground="White" />
-                                                <Border Background="#333333" CornerRadius="2" Padding="3,3"
-                                                        IsVisible="{Binding Explicit}">
-                                                    <TextBlock Text="Explicit" FontSize="10" Foreground="#B3B3B3" />
-                                                </Border>
-                                                <Border Background="#333333" CornerRadius="2" Padding="3,3"
-                                                        IsVisible="{Binding IsLocal}">
-                                                    <TextBlock Text="Local" FontSize="10" Foreground="#B3B3B3" />
-                                                </Border>
-                                                <Border Background="#333333" CornerRadius="2" Padding="3,3"
-                                                        IsVisible="{Binding !IsPlayable}">
-                                                    <TextBlock Text="Not Playable" FontSize="10" Foreground="#B3B3B3" />
-                                                </Border>
+                                <!-- Track Name Column -->
+                                <DataGridTemplateColumn Header="Title" Width="*" SortMemberPath="Name">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate x:DataType="vm:TrackItemViewModel">
+                                            <StackPanel VerticalAlignment="Center" Margin="0,5">
+                                                <StackPanel Orientation="Horizontal" Spacing="5">
+                                                    <TextBlock Text="{Binding Name}" Foreground="White" />
+                                                    <Border Background="#333333" CornerRadius="2" Padding="3,3"
+                                                            IsVisible="{Binding Explicit}">
+                                                        <TextBlock Text="Explicit" FontSize="10" Foreground="#B3B3B3" />
+                                                    </Border>
+                                                    <Border Background="#333333" CornerRadius="2" Padding="3,3"
+                                                            IsVisible="{Binding IsLocal}">
+                                                        <TextBlock Text="Local" FontSize="10" Foreground="#B3B3B3" />
+                                                    </Border>
+                                                    <Border Background="#333333" CornerRadius="2" Padding="3,3"
+                                                            IsVisible="{Binding !IsPlayable}">
+                                                        <TextBlock Text="Not Playable" FontSize="10"
+                                                                   Foreground="#B3B3B3" />
+                                                    </Border>
+                                                </StackPanel>
+                                                <TextBlock Foreground="#B3B3B3" FontSize="12">
+                                                    <TextBlock.Text>
+                                                        <MultiBinding StringFormat="{}{0}">
+                                                            <Binding Path="Artists">
+                                                                <Binding.Converter>
+                                                                    <converters:ArtistListToStringConverter
+                                                                        Separator=", " />
+                                                                </Binding.Converter>
+                                                            </Binding>
+                                                        </MultiBinding>
+                                                    </TextBlock.Text>
+                                                </TextBlock>
                                             </StackPanel>
-                                            <TextBlock Foreground="#B3B3B3" FontSize="12">
-                                                <TextBlock.Text>
-                                                    <MultiBinding StringFormat="{}{0}">
-                                                        <Binding Path="Artists">
-                                                            <Binding.Converter>
-                                                                <converters:ArtistListToStringConverter Separator=", " />
-                                                            </Binding.Converter>
-                                                        </Binding>
-                                                    </MultiBinding>
-                                                </TextBlock.Text>
-                                            </TextBlock>
-                                        </StackPanel>
-                                    </StackPanel>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
-                    </Grid>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
 
-                    <!-- Placeholder when no playlist selected -->
-                    <TextBlock Grid.Row="1"
-                               Text="Select a playlist from the sidebar to view and clean it"
-                               VerticalAlignment="Center"
-                               HorizontalAlignment="Center"
-                               Foreground="#B3B3B3"
-                               IsVisible="{Binding SelectedPlaylist, Converter={x:Static ObjectConverters.IsNull}}" />
+                                <!-- Duration Column -->
+                                <DataGridTemplateColumn Header="Duration" Width="100" SortMemberPath="Duration">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate x:DataType="vm:TrackItemViewModel">
+                                            <TextBlock Text="{Binding Duration}"
+                                                       Foreground="#B3B3B3"
+                                                       HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center"
+                                                       Margin="0,0,10,0" />
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                            </DataGrid.Columns>
+
+                            <!-- Styling -->
+                            <DataGrid.Styles>
+                                <!-- Row styling -->
+                                <Style Selector="DataGridRow">
+                                    <Setter Property="Background" Value="Transparent" />
+                                </Style>
+                                <!-- Header styling -->
+                                <Style Selector="DataGridColumnHeader">
+                                    <Setter Property="Background" Value="#212121" />
+                                    <Setter Property="Foreground" Value="#B3B3B3" />
+                                    <Setter Property="FontWeight" Value="SemiBold" />
+                                    <Setter Property="Padding" Value="10,8" />
+                                </Style>
+                                <!-- Selected row styling -->
+                                <Style Selector="DataGridRow:selected">
+                                    <Setter Property="Background" Value="#333333" />
+                                </Style>
+                                <!-- Remove focus visuals -->
+                                <Style Selector="DataGrid:focus DataGridCell:current">
+                                    <Setter Property="BorderBrush" Value="Transparent" />
+                                </Style>
+                            </DataGrid.Styles>
+                        </DataGrid>
+                    </Grid>
                 </Grid>
             </Border>
         </Grid>

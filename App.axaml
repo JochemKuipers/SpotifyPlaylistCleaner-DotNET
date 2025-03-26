@@ -5,10 +5,11 @@
              RequestedThemeVariant="Dark">
 
     <Application.Resources>
-        <svg:SvgImage x:Key="AppIcon" Source="/Assets/Icons/icon.svg"/>
+        <svg:SvgImage x:Key="AppIcon" Source="/Assets/Icons/icon.svg" />
     </Application.Resources>
 
     <Application.Styles>
         <FluentTheme />
+        <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml" />
     </Application.Styles>
 </Application>

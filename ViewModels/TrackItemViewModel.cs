@@ -17,10 +17,10 @@ public class TrackItemViewModel(FullTrack track, int index) : ViewModelBase
         set => this.RaiseAndSetIfChanged(ref _displayIndex, value);
     }
 
-    public string Name => Track.Name;
+    public string? Name => Track.Name;
     public IList<SimpleArtist> Artists => Track.Artists;
     public SimpleAlbum Album => Track.Album;
-    public TimeSpan Duration => TimeSpan.FromMilliseconds(Track.DurationMs);
+    public string? Duration => TimeSpan.FromMilliseconds(Track.DurationMs).ToString(@"hh\:mm\:ss");
     public bool IsPlayable => Track.IsPlayable;
     public bool Explicit => Track.Explicit;
     public bool IsLocal => Track.IsLocal;

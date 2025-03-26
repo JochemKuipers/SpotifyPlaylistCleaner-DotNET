@@ -9,6 +9,7 @@ using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
+using Avalonia.Threading;
 using ReactiveUI;
 using SpotifyAPI.Web;
 using SpotifyPlaylistCleaner_DotNET.Models;
@@ -52,6 +53,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         AuthenticateCommand = ReactiveCommand.CreateFromTask(AuthenticateSpotify);
         ReactiveCommand.CreateFromTask(FetchLikedTracks);
         RefreshTracksCommand = ReactiveCommand.Create<bool>(ForceRefreshTracks);
+        ResetFiltersCommand = ReactiveCommand.Create(ResetFilters);
 
         if (File.Exists(SpotifyAuth.CredentialsPath)) Task.Run(AuthenticateSpotify);
 
@@ -86,23 +88,19 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     {
         get
         {
-            if (string.IsNullOrWhiteSpace(SearchQuery))
+            IEnumerable<TrackItemViewModel> filteredItems = _trackItems;
+
+            // Apply search filtering
+            if (!string.IsNullOrWhiteSpace(SearchQuery))
             {
-                // Reset all indices to their original positions
-                for (var i = 0; i < _trackItems.Count; i++) _trackItems[i].DisplayIndex = i + 1;
-                return _trackItems;
+                var search = SearchQuery.Trim().ToLower();
+                filteredItems = filteredItems.Where(t =>
+                    t.Name != null && (t.Name.Contains(search, StringComparison.CurrentCultureIgnoreCase) ||
+                                       t.Artists.Any(a =>
+                                           a.Name.Contains(search, StringComparison.CurrentCultureIgnoreCase))));
             }
 
-            var filtered = _trackItems.Where(item =>
-                item.Name.Contains(SearchQuery, StringComparison.OrdinalIgnoreCase) ||
-                item.Artists.Any(artist => artist.Name.Contains(SearchQuery, StringComparison.OrdinalIgnoreCase)) ||
-                item.Album.Name.Contains(SearchQuery, StringComparison.OrdinalIgnoreCase)
-            ).ToList();
-
-            // Update display indices for filtered results
-            for (var i = 0; i < filtered.Count; i++) filtered[i].DisplayIndex = i + 1;
-
-            return filtered;
+            return filteredItems;
         }
     }
 
@@ -200,12 +198,19 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     public ICommand AuthenticateCommand { get; }
     public ICommand RefreshTracksCommand { get; }
 
+    public ICommand ResetFiltersCommand { get; }
+
     // Implement IDisposable
     public void Dispose()
     {
         _currentLoadingCts?.Cancel();
         _currentLoadingCts?.Dispose();
         GC.SuppressFinalize(this);
+    }
+
+    private void ResetFilters()
+    {
+        SearchQuery = string.Empty;
     }
 
     private void UpdateTrackItems()
@@ -278,9 +283,8 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
             var playlistsResponse = await _spotifyClient.Playlists.CurrentUsers();
 
             // Add initial batch of playlists
-            foreach (var playlist in playlistsResponse.Items!)
-                if (playlist.Owner?.Id == user.Id)
-                    allPlaylists.Add(playlist);
+            foreach (var playlist in playlistsResponse.Items!.Where(playlist => playlist.Owner?.Id == user.Id))
+                allPlaylists.Add(playlist);
 
             // Handle pagination to get all playlists
             while (playlistsResponse.Next != null)
@@ -302,75 +306,112 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
+    // Modify your track loading method in MainWindowViewModel.cs
     private async Task FetchPlaylistTracks(FullPlaylist playlist)
     {
-        if (_spotifyClient == null) return;
-
-        var playlistId = playlist.Id;
-        if (playlistId == null) return;
+        if (_spotifyClient == null || playlist.Id == null) return;
 
         var cancellationToken = _currentLoadingCts?.Token ?? CancellationToken.None;
 
-        var cachedTracks = await TryLoadTracksFromCacheAsync(playlistId, cancellationToken);
+        // Try loading from cache first
+        var cachedTracks = await TryLoadTracksFromCacheAsync(playlist.Id, cancellationToken);
         if (IsCacheEnabled && cachedTracks.Count > 0)
         {
-            Tracks = cachedTracks;
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                _trackItems.Clear();
+                for (var i = 0; i < cachedTracks.Count; i++)
+                    _trackItems.Add(new TrackItemViewModel(cachedTracks[i], i + 1));
+            });
+
             StatusMessage = $"Loaded {cachedTracks.Count} tracks from cache";
+            this.RaisePropertyChanged(nameof(FilteredTracks));
             return;
         }
 
         try
         {
-            Tracks.Clear();
-
-            var user = await _spotifyClient.UserProfile.Current(cancellationToken);
-
             IsLoadingTracks = true;
             LoadingProgress = 0;
-            StatusMessage = $"Loading tracks for playlist {playlist.Name}...";
-
-            var totalTracks = playlist.Tracks?.Total ?? 0;
+            LoadingStatusMessage = "Loading tracks...";
+            _trackItems.Clear(); // Clear existing tracks
 
             cancellationToken.ThrowIfCancellationRequested();
 
-            var tracksRequest = new PlaylistGetItemsRequest
+            // Get total tracks count for progress calculation
+            if (playlist.Tracks != null)
             {
-                Limit = 50,
-                Market = user.Country
-            };
-            var tracksResponse = await _spotifyClient.Playlists.GetItems(playlistId, tracksRequest, cancellationToken);
-            var allTracks = new ObservableCollection<FullTrack>();
+                var totalTracks = playlist.Tracks.Total;
+                var tracksLoaded = 0;
 
-            LoadingProgress = (int)(tracksResponse.Items!.Count * 100.0 / totalTracks);
-            LoadingStatusMessage = $"Loaded {tracksResponse.Items.Count} of {totalTracks} tracks...";
+                // Initial fetch
+                var tracks = await _spotifyClient.Playlists.GetItems(playlist.Id, cancellationToken);
+                if (tracks.Items != null)
+                {
+                    var allTracks = new List<PlaylistTrack<IPlayableItem>>(tracks.Items);
 
-            foreach (var track in tracksResponse.Items!)
-                if (track.Track is FullTrack fullTrack)
-                    allTracks.Add(fullTrack);
+                    // Update progress after initial fetch
+                    tracksLoaded += tracks.Items.Count;
+                    var progress = (int)((double)tracksLoaded / totalTracks * 100)!;
 
-            while (tracksResponse.Next != null)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
+                    // Update UI using dispatcher
+                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        LoadingProgress = progress;
+                        LoadingStatusMessage = $"Loaded {tracksLoaded} of {totalTracks} tracks...";
+                    });
 
-                tracksResponse = await _spotifyClient.NextPage(tracksResponse);
+                    // Continue fetching if there are more tracks
+                    while (tracks.Next != null)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
 
-                cancellationToken.ThrowIfCancellationRequested();
+                        // Get next page of tracks
+                        tracks = await _spotifyClient.NextPage(tracks);
+                        if (tracks.Items != null)
+                        {
+                            allTracks.AddRange(tracks.Items);
 
-                foreach (var track in tracksResponse.Items!)
-                    if (track.Track is FullTrack fullTrack)
-                        allTracks.Add(fullTrack);
+                            // Update progress
+                            tracksLoaded += tracks.Items.Count;
+                        }
 
-                LoadingProgress = (int)(allTracks.Count * 100.0 / totalTracks);
-                LoadingStatusMessage = $"Loaded {allTracks.Count} of {totalTracks} tracks...";
+                        progress = (int)((double)tracksLoaded / totalTracks * 100)!;
+
+                        // Update UI using dispatcher
+                        await Dispatcher.UIThread.InvokeAsync(() =>
+                        {
+                            LoadingProgress = progress;
+                            LoadingStatusMessage = $"Loaded {tracksLoaded} of {totalTracks} tracks...";
+                        });
+                    }
+
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    // Extract FullTracks from the playlist tracks
+                    var fullTracks = new ObservableCollection<FullTrack>();
+                    foreach (var item in allTracks)
+                        if (item.Track is FullTrack track)
+                            fullTracks.Add(track);
+
+                    // Save to cache if enabled
+                    if (IsCacheEnabled)
+                        await SaveTracksToCacheAsync(playlist.Id, fullTracks, cancellationToken);
+
+                    // Process and set tracks using dispatcher
+                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        // Process and add all tracks to the observable collection
+                        _trackItems.Clear();
+                        for (var i = 0; i < fullTracks.Count; i++)
+                            _trackItems.Add(new TrackItemViewModel(fullTracks[i], i + 1));
+
+                        IsLoadingTracks = false;
+                        LoadingStatusMessage = $"Loaded {_trackItems.Count} tracks";
+                        this.RaisePropertyChanged(nameof(FilteredTracks));
+                    });
+                }
             }
-
-            cancellationToken.ThrowIfCancellationRequested();
-
-            Tracks = [.. allTracks];
-            StatusMessage = $"Loaded {allTracks.Count} tracks";
-
-            this.RaisePropertyChanged(nameof(FilteredTracks));
-            if (IsCacheEnabled) await SaveTracksToCacheAsync(playlistId, allTracks, cancellationToken);
         }
         catch (OperationCanceledException)
         {
@@ -379,11 +420,17 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         catch (Exception ex)
         {
             if (!cancellationToken.IsCancellationRequested)
-                StatusMessage = $"Failed to load tracks for playlist {playlist.Name}: {ex.Message}";
+                // Handle error on UI thread
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    StatusMessage = $"Error fetching tracks: {ex.Message}";
+                    IsLoadingTracks = false;
+                });
         }
         finally
         {
-            if (!cancellationToken.IsCancellationRequested) IsLoadingTracks = false;
+            if (!cancellationToken.IsCancellationRequested)
+                await Dispatcher.UIThread.InvokeAsync(() => IsLoadingTracks = false);
         }
     }
 
