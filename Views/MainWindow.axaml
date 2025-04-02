@@ -357,7 +357,34 @@
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
+
+                                <!-- Delete Button Column -->
+                                <DataGridTemplateColumn Header="" Width="Auto" MinWidth="50">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate x:DataType="vm:TrackItemViewModel">
+                                            <Button Background="Transparent"
+                                                    BorderThickness="0"
+                                                    Width="32"
+                                                    Height="32"
+                                                    Padding="0"
+                                                    HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center"
+                                                    Command="{Binding DeleteTrackCommand}"
+                                                    ToolTip.Tip="Delete Track">
+                                                <Viewbox Width="16" Height="16"
+                                                         HorizontalAlignment="Center"
+                                                         VerticalAlignment="Center"
+                                                         Margin="-2,-2,2,2">
+                                                    <Path
+                                                        Data="M6,19C6,20.1 6.9,21 8,21H16C17.1,21 18,20.1 18,19V7H6V19M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19V4Z"
+                                                        Fill="#ff5252" />
+                                                </Viewbox>
+                                            </Button>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
                             </DataGrid.Columns>
+
 
                             <!-- Styling -->
                             <DataGrid.Styles>

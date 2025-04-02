@@ -1,15 +1,17 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Windows.Input;
 using ReactiveUI;
 using SpotifyAPI.Web;
 
 namespace SpotifyPlaylistCleaner_DotNET.ViewModels;
 
-public class TrackItemViewModel(FullTrack track, int index) : ViewModelBase
+public class TrackItemViewModel(FullTrack track, int index, Action<FullTrack> deleteAction)
+    : ViewModelBase
 {
     private int _displayIndex = index;
-
-    private FullTrack Track { get; } = track;
+    internal FullTrack Track { get; } = track;
+    public ICommand DeleteTrackCommand { get; } = ReactiveCommand.Create(() => deleteAction(track));
 
     public int DisplayIndex
     {
@@ -17,11 +19,14 @@ public class TrackItemViewModel(FullTrack track, int index) : ViewModelBase
         set => this.RaiseAndSetIfChanged(ref _displayIndex, value);
     }
 
+    public string Id => Track.Id;
     public string Name => Track.Name;
     public IList<SimpleArtist> Artists => Track.Artists;
     public SimpleAlbum Album => Track.Album;
     public string Duration => TimeSpan.FromMilliseconds(Track.DurationMs).ToString(@"hh\:mm\:ss");
+    public int DurationMs => Track.DurationMs;
     public bool IsPlayable => Track.IsPlayable;
     public bool Explicit => Track.Explicit;
     public bool IsLocal => Track.IsLocal;
+    public string Uri => Track.Uri;
 }

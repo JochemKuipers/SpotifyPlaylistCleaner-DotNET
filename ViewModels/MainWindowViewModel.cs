@@ -77,6 +77,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         set
         {
             this.RaiseAndSetIfChanged(ref _searchQuery, value);
+            _searchQueryChanged = true;
             this.RaisePropertyChanged(nameof(FilteredTracks));
         }
     }
@@ -218,7 +219,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         {
             _trackItems.Clear();
             for (var i = 0; i < Tracks.Count; i++)
-                _trackItems.Add(new TrackItemViewModel(Tracks[i], i + 1));
+                _trackItems.Add(new TrackItemViewModel(Tracks[i], i + 1, DeleteTrack));
         }
         else
         {
@@ -255,6 +256,70 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         {
             IsAuthenticating = false;
         }
+    }
+
+    private void DeleteTrack(FullTrack track)
+    {
+        var cancellationToken = _currentLoadingCts?.Token ?? CancellationToken.None;
+        if (_spotifyClient == null) return;
+
+        // Find and remove the track item from the collection
+        var trackItem = _trackItems.FirstOrDefault(t => t.Track == track);
+        if (trackItem != null)
+            _trackItems.Remove(trackItem);
+
+        // Remove from tracks collection
+        Tracks.Remove(track);
+
+        // Reset filtered tracks cache
+        _filteredTracks = null;
+        this.RaisePropertyChanged(nameof(FilteredTracks));
+
+        // Update Spotify via API
+        if (SelectedPlaylist == null) return;
+        if (SelectedPlaylist.Id == "liked_songs_virtual")
+            Task.Run(async () =>
+            {
+                try
+                {
+                    await _spotifyClient.Library.RemoveTracks(new LibraryRemoveTracksRequest([track.Id]),
+                        cancellationToken);
+
+                    // Update cache if enabled
+                    if (IsCacheEnabled)
+                        await SaveLikedTracksToCacheAsync(Tracks, cancellationToken);
+
+                    StatusMessage = $"Removed '{track.Name}' from your liked songs";
+                }
+                catch (Exception ex)
+                {
+                    StatusMessage = $"Failed to remove track: {ex.Message}";
+                }
+            }, cancellationToken);
+        else
+            Task.Run(async () =>
+            {
+                try
+                {
+                    if (SelectedPlaylist.Id != null)
+                    {
+                        await _spotifyClient.Playlists.RemoveItems(SelectedPlaylist.Id, new PlaylistRemoveItemsRequest
+                        {
+                            Tracks = [new PlaylistRemoveItemsRequest.Item { Uri = track.Uri }]
+                        }, cancellationToken);
+
+                        // Update cache if enabled
+                        if (IsCacheEnabled && SelectedPlaylist?.Id != null)
+                            await SaveTracksToCacheAsync(SelectedPlaylist.Id, Tracks, cancellationToken);
+                    }
+
+                    StatusMessage = $"Removed '{track.Name}' from playlist";
+                }
+                catch (Exception ex)
+                {
+                    StatusMessage = $"Failed to remove track: {ex.Message}";
+                }
+            }, cancellationToken);
     }
 
     private async Task FetchUserPlaylists()
