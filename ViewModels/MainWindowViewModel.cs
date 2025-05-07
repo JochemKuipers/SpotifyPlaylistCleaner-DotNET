@@ -792,9 +792,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
             StatusMessage = "Finding duplicates...";
 
             var duplicatesFinder = new Duplicates(
-                _trackItems.ToList(),
-                DeleteTrack,
-                status => StatusMessage = status
+                _trackItems.ToList()
             );
 
             var duplicates = duplicatesFinder.FindAllDuplicates();
@@ -802,7 +800,6 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
             DuplicateGroups.Clear();
             foreach (var group in duplicates) DuplicateGroups.Add(group);
 
-            // After populating the DuplicateGroups collection
             InitializeDuplicatesTreeDataGrid();
 
             if (DuplicateGroups.Count > 0)
@@ -845,29 +842,6 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         StatusMessage = $"Removed {deletedCount} duplicate tracks";
         DuplicateGroups.Clear();
         IsDuplicateViewVisible = false;
-
-        // Refresh track list
-        ForceRefreshTracks();
-    }
-
-    // Method to delete a specific duplicate from a group
-    private void DeleteDuplicate(Duplicates.DuplicateGroup group, TrackItemViewModel? track)
-    {
-        if (group.Tracks.Count <= 1) return; // Don't delete the last track in the group
-
-        if (track != null)
-        {
-            DeleteTrack(track.Track);
-
-            // Update the duplicate group
-            group.Tracks.Remove(track);
-
-            // If only one track remains, remove the group
-            if (group.Tracks.Count <= 1) DuplicateGroups.Remove(group);
-
-            // Update status
-            StatusMessage = $"Removed duplicate track: {track.Name}";
-        }
 
         // Refresh track list
         ForceRefreshTracks();
@@ -974,22 +948,39 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         switch (node)
         {
             case TrackItemViewModel track:
-            {
-                // Find the group containing this track
-                var group = DuplicateGroups.FirstOrDefault(g => g.Tracks.Contains(track));
-                if (group != null)
-                    DeleteDuplicate(group, track);
-                break;
-            }
-            case Duplicates.DuplicateGroup group:
-            {
-                // Delete all tracks in the group
-                foreach (var track in group.Tracks.ToList())
+                // Find which group this track belongs to
+                var parentGroup = DuplicateGroups.FirstOrDefault(g => g.Tracks.Contains(track));
+                if (parentGroup != null)
+                {
                     DeleteTrack(track.Track);
-                // Remove the group from the list
-                DuplicateGroups.Remove(group);
+
+                    // Update the duplicate group
+                    parentGroup.Tracks.Remove(track);
+
+                    // If only one track remains, remove the group
+                    if (parentGroup.Tracks.Count <= 1)
+                        DuplicateGroups.Remove(parentGroup);
+
+                    // Rebuild the TreeDataGrid to reflect changes
+                    InitializeDuplicatesTreeDataGrid();
+
+                    StatusMessage = $"Removed track: {track.Name}";
+                }
+
                 break;
-            }
+
+            case Duplicates.DuplicateGroup group:
+                // Delete all tracks except the first one
+                for (var i = 1; i < group.Tracks.Count; i++)
+                    DeleteTrack(group.Tracks[i].Track);
+
+                DuplicateGroups.Remove(group);
+
+                // Rebuild the TreeDataGrid to reflect changes
+                InitializeDuplicatesTreeDataGrid();
+
+                StatusMessage = "Removed duplicate group";
+                break;
         }
     }
 

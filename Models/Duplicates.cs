@@ -1,15 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using SpotifyAPI.Web;
 using SpotifyPlaylistCleaner_DotNET.ViewModels;
 
 namespace SpotifyPlaylistCleaner_DotNET.Models;
 
 public class Duplicates(
-    List<TrackItemViewModel> trackItems,
-    Action<FullTrack> deleteTrackAction,
-    Action<string> updateStatusAction)
+    List<TrackItemViewModel> trackItems)
 {
     private List<DuplicateGroup> GetAndGroupDuplicates()
     {

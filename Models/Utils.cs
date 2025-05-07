@@ -9,9 +9,9 @@ public static partial class Utils
     {
         try
         {
-            songName = MyRegex().IsMatch(songName)
-                ? MyRegex2().Split(songName)[0].Trim()
-                : MyRegex1().Replace(songName, "").Trim();
+            songName = MyRegex().IsMatch(songName!)
+                ? MyRegex2().Split(songName!)[0].Trim()
+                : MyRegex1().Replace(songName!, "").Trim();
         }
         catch (Exception e)
         {

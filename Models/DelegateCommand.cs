@@ -19,4 +19,9 @@ public class DelegateCommand<T>(Action<T> execute, Predicate<T>? canExecute = nu
     }
 
     public event EventHandler? CanExecuteChanged;
+
+    public void RaiseCanExecuteChanged()
+    {
+        CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+    }
 }
