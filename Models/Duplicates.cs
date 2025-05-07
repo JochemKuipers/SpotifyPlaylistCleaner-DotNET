@@ -1,8 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using SpotifyAPI.Web;
 using SpotifyPlaylistCleaner_DotNET.ViewModels;
-using Enumerable = System.Linq.Enumerable;
 
 namespace SpotifyPlaylistCleaner_DotNET.Models;
 
@@ -25,18 +25,19 @@ public class Duplicates(
         try
         {
             // Group tracks by cleaned name and artists
-            var groupedTracks =
-                new Dictionary<(string CleanedName, IList<SimpleArtist> Artists), List<TrackItemViewModel>>();
+            var groupedTracks = new Dictionary<string, List<TrackItemViewModel>>();
 
+            // Step 1: Populate the dictionary
             foreach (var trackItem in trackItems)
             {
-                // Clean track name using existing Utils.CleanName method
+                // Clean track name
                 var cleanedName = Utils.CleanName(trackItem.Name);
 
-                // Join artist names as a string for the key
-                var artistsKey = trackItem.Artists;
+                // Create a normalized artist string for comparison
+                var artistsNormalized = string.Join(",", trackItem.Artists.Select(a => a.Name.ToLower().Trim()));
 
-                var key = (CleanedName: cleanedName, Artists: artistsKey);
+                // Combine name and artists into a single key
+                var key = $"{cleanedName}|{artistsNormalized}";
 
                 if (!groupedTracks.ContainsKey(key))
                     groupedTracks[key] = [];
@@ -44,43 +45,34 @@ public class Duplicates(
                 groupedTracks[key].Add(trackItem);
             }
 
-            // Log grouping info
-            foreach (var entry in groupedTracks)
-            {
-                Console.WriteLine($"{entry.Key.CleanedName} - {entry.Key.Artists}");
-                foreach (var trackItem in entry.Value)
-                    Console.WriteLine($"\t{trackItem.Name} - {trackItem.Track.Uri}");
-            }
-
             Console.WriteLine($"Found {groupedTracks.Count} unique tracks");
 
-            // Create duplicate groups (only for items with multiple tracks)
-            var duplicatesGrouped = Enumerable.ToList(Enumerable.Select(
-                Enumerable.Where(groupedTracks, entry => entry.Value.Count > 1), entry => new DuplicateGroup
-                {
-                    Track = entry.Value[0],
-                    Tracks = [..entry.Value]
-                }));
+            // Step 2: Find entries with multiple tracks (duplicates)
+            var duplicateEntries = new List<KeyValuePair<string, List<TrackItemViewModel>>>();
 
-            // Log duplicate information
-            foreach (var duplicate in duplicatesGrouped)
+            foreach (var kvp in groupedTracks)
+                if (kvp.Value.Count > 1)
+                    duplicateEntries.Add(kvp);
+
+            Console.WriteLine($"Found {duplicateEntries.Count} duplicates");
+
+            // Step 3: Create duplicate groups
+            var duplicateGroups = new List<DuplicateGroup>();
+
+            foreach (var kvp in duplicateEntries)
             {
-                var firstTrack = duplicate.Track;
-                var artistNames = string.Join(", ", Enumerable.Select(firstTrack.Artists, a => a.Name));
-                var albumName = firstTrack.Track.Album.Name;
+                var tracksInGroup = kvp.Value;
 
-                Console.WriteLine($"{firstTrack.Name} by {artistNames} ({albumName})");
-
-                for (var i = 0; i < duplicate.Tracks.Count; i++)
+                var group = new DuplicateGroup
                 {
-                    var trackItem = duplicate.Tracks[i];
-                    var duration = trackItem.Duration;
-                    Console.WriteLine($"\t{i + 1}. {trackItem.Name} - {trackItem.Track.Uri} : {duration}");
-                }
+                    Track = tracksInGroup[0],
+                    Tracks = new List<TrackItemViewModel>(tracksInGroup)
+                };
+
+                duplicateGroups.Add(group);
             }
 
-            Console.WriteLine($"Found {duplicatesGrouped.Count} duplicates");
-            return duplicatesGrouped;
+            return duplicateGroups;
         }
         catch (Exception e)
         {
@@ -88,6 +80,7 @@ public class Duplicates(
             throw;
         }
     }
+
 
     private List<DuplicateGroup> FindExactDuplicates(List<DuplicateGroup> duplicatesGrouped)
     {
@@ -97,8 +90,9 @@ public class Duplicates(
 
             foreach (var duplicate in duplicatesGrouped)
             {
+                if (duplicate.Track == null) continue;
                 var trackName = duplicate.Track.Name;
-                var trackArtists = string.Join(", ", Enumerable.Select(duplicate.Track.Artists, a => a.Name));
+                var trackArtists = string.Join(", ", duplicate.Track.Artists.Select(a => a.Name));
 
                 // Check for exact duplicates within this group
                 var exactGroup = new List<TrackItemViewModel>();
@@ -112,16 +106,15 @@ public class Duplicates(
 
                         // Compare all attributes to find exact duplicates
                         var sameOriginalName = track1.Name == track2.Name;
-                        var sameArtists = string.Join(",", Enumerable.Select(track1.Artists, a => a.Name)) ==
-                                          string.Join(",", Enumerable.Select(track2.Artists, a => a.Name));
-                        var sameAlbum = track1.Album.Name == track2.Album.Name;
+                        var sameArtists = string.Join(",", track1.Artists.Select(a => a.Name)) ==
+                                          string.Join(",", track2.Artists.Select(a => a.Name));
 
                         // Compare durations using the utility method
                         var durationClose = Utils.IsDurationWithinRange(
                             track1.DurationMs,
                             track2.DurationMs);
 
-                        if (!sameOriginalName || !sameArtists || !sameAlbum || !durationClose) continue;
+                        if (!sameOriginalName || !sameArtists || !durationClose) continue;
                         if (!exactGroup.Contains(track1))
                             exactGroup.Add(track1);
                         if (!exactGroup.Contains(track2))
@@ -147,8 +140,11 @@ public class Duplicates(
             foreach (var duplicate in exactDuplicates)
             {
                 var track = duplicate.Track;
-                var artistNames = string.Join(", ", Enumerable.Select(track.Artists, a => a.Name));
-                Console.WriteLine($"{track.Name} by {artistNames}");
+                if (track != null)
+                {
+                    var artistNames = string.Join(", ", track.Artists.Select(a => a.Name));
+                    Console.WriteLine($"{track.Name} by {artistNames}");
+                }
 
                 for (var i = 0; i < duplicate.Tracks.Count; i++)
                 {
@@ -167,9 +163,42 @@ public class Duplicates(
         }
     }
 
-    private class DuplicateGroup
+    public List<DuplicateGroup> FindAllDuplicates()
     {
-        public required TrackItemViewModel Track { get; init; }
+        var potentialDuplicates = GetAndGroupDuplicates();
+        return FindExactDuplicates(potentialDuplicates);
+    }
+
+
+    public class DuplicateGroup : ViewModelBase, MainWindowViewModel.ITreeNode
+    {
+        public string? Name => GroupName;
+        public string Description => $"{ArtistNames} - {DuplicateCount} duplicates";
+        public bool IsExpanded { get; set; } = true;
+        public bool IsSelected { get; set; } = false;
+        public bool IsEnabled { get; set; } = true;
+        public bool IsChecked { get; set; } = false;
+
+        public Action<DuplicateGroup>? OnDeleteAction { get; set; }
+        public TrackItemViewModel? Track { get; init; }
+        private TrackItemViewModel? OriginalTrack => Tracks.FirstOrDefault();
+
         public required List<TrackItemViewModel> Tracks { get; init; }
+
+        private string? GroupName => OriginalTrack?.Name;
+        private string? ArtistNames => OriginalTrack?.ArtistNames;
+        public int DuplicateCount => Tracks.Count;
+
+        public string? DisplayImage => OriginalTrack?.DisplayImage;
+        public string? Uri => OriginalTrack?.Uri;
+        public string? DisplayName => OriginalTrack?.Name;
+        public string? DisplayArtist => OriginalTrack?.DisplayArtist;
+
+        public void DeleteTrack()
+        {
+            if (OriginalTrack != null)
+                DeleteTrack();
+            OnDeleteAction?.Invoke(this);
+        }
     }
 }

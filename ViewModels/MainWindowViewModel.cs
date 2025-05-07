@@ -9,10 +9,18 @@ using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
+using AsyncImageLoader;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.Models.TreeDataGrid;
+using Avalonia.Controls.Templates;
+using Avalonia.Layout;
+using Avalonia.Media;
 using Avalonia.Threading;
 using ReactiveUI;
 using SpotifyAPI.Web;
 using SpotifyPlaylistCleaner_DotNET.Models;
+using Image = SpotifyAPI.Web.Image;
 
 namespace SpotifyPlaylistCleaner_DotNET.ViewModels;
 
@@ -36,11 +44,23 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     private readonly TimeSpan _cacheTtl = TimeSpan.FromHours(24);
     private readonly ObservableCollection<TrackItemViewModel> _trackItems = [];
 
+    // Add a command to go back to the regular tracks view
+
     private CancellationTokenSource? _currentLoadingCts;
+
+    // Add this property
+
+    private ObservableCollection<Duplicates.DuplicateGroup> _duplicateGroups;
+
+    // Update the property type to use ITreeNode
+    private HierarchicalTreeDataGridSource<ITreeNode>? _duplicateGroupsSource;
 
     private IEnumerable<TrackItemViewModel>? _filteredTracks;
     private bool _isAuthenticated;
     private bool _isAuthenticating;
+
+    // Update the IsDuplicateViewVisible property to properly notify changes
+    private bool _isDuplicateViewVisible;
     private bool _isLoadingPlaylists;
     private bool _isLoadingTracks;
     private int _lastReportedProgress;
@@ -56,12 +76,31 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     private string _statusMessage = "";
     private ObservableCollection<FullTrack> _tracks = [];
 
+
     public MainWindowViewModel()
     {
         AuthenticateCommand = ReactiveCommand.CreateFromTask(AuthenticateSpotify);
         ReactiveCommand.CreateFromTask(FetchLikedTracks);
         RefreshTracksCommand = ReactiveCommand.Create<bool>(ForceRefreshTracks);
         ResetFiltersCommand = ReactiveCommand.Create(ResetFilters);
+        FindDuplicatesCommand = ReactiveCommand.CreateFromTask(FindDuplicatesAsync);
+        RemoveAllDuplicatesCommand = ReactiveCommand.Create(RemoveAllDuplicates);
+        _duplicateGroups = [];
+        IsDuplicateViewVisible = false;
+        DeleteDuplicateCommand = ReactiveCommand.Create<TrackItemViewModel>(track =>
+        {
+            var group = DuplicateGroups.FirstOrDefault(g => g.Tracks.Contains(track));
+            if (group != null)
+                DeleteDuplicate(group, track);
+        });
+
+        // Add the new command
+        BackToTracksCommand = ReactiveCommand.Create(() =>
+        {
+            IsDuplicateViewVisible = false;
+            this.RaisePropertyChanged(nameof(IsTracksViewVisible));
+        });
+
 
         if (File.Exists(SpotifyAuth.CredentialsPath)) Task.Run(AuthenticateSpotify);
 
@@ -70,6 +109,17 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     }
 
     private bool IsCacheEnabled { get; set; } = true;
+
+    public bool IsDuplicateViewVisible
+    {
+        get => _isDuplicateViewVisible;
+        set => this.RaiseAndSetIfChanged(ref _isDuplicateViewVisible, value);
+    }
+
+    // Add a property to control the visibility of the regular tracks view
+    public bool IsTracksViewVisible => !IsDuplicateViewVisible;
+
+    public ICommand BackToTracksCommand { get; }
 
     public string SearchQuery
     {
@@ -194,11 +244,27 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
+    public ObservableCollection<Duplicates.DuplicateGroup> DuplicateGroups
+    {
+        get => _duplicateGroups;
+        set => this.RaiseAndSetIfChanged(ref _duplicateGroups, value);
+    }
+
+    public HierarchicalTreeDataGridSource<ITreeNode>? DuplicateGroupsSource
+    {
+        get => _duplicateGroupsSource;
+        private set => this.RaiseAndSetIfChanged(ref _duplicateGroupsSource, value);
+    }
 
     public ICommand AuthenticateCommand { get; }
     public ICommand RefreshTracksCommand { get; }
-
     public ICommand ResetFiltersCommand { get; }
+
+    public ICommand FindDuplicatesCommand { get; }
+    public ICommand RemoveAllDuplicatesCommand { get; }
+
+    public ICommand DeleteDuplicateCommand { get; }
+
 
     public void Dispose()
     {
@@ -338,7 +404,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
             {
                 Id = "liked_songs_virtual",
                 Name = "Liked Songs",
-                Description = "Songs you've liked on Spotify",
+                Description = "Songs you've liked on Spotify on Spotify",
                 Images =
                 [
                     new Image
@@ -716,8 +782,210 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
+    // Update the FindDuplicatesAsync method to show the TreeView
+    private Task FindDuplicatesAsync()
+    {
+        if (SelectedPlaylist == null || !_trackItems.Any())
+        {
+            StatusMessage = "Please select a playlist first";
+            return Task.CompletedTask;
+        }
 
-// Cache helper methods
+        try
+        {
+            StatusMessage = "Finding duplicates...";
+
+            var duplicatesFinder = new Duplicates(
+                _trackItems.ToList(),
+                DeleteTrack,
+                status => StatusMessage = status
+            );
+
+            var duplicates = duplicatesFinder.FindAllDuplicates();
+
+            DuplicateGroups.Clear();
+            foreach (var group in duplicates) DuplicateGroups.Add(group);
+
+            // After populating the DuplicateGroups collection
+            InitializeDuplicatesTreeDataGrid();
+
+            if (DuplicateGroups.Count > 0)
+            {
+                IsDuplicateViewVisible = true;
+                this.RaisePropertyChanged(nameof(IsTracksViewVisible));
+                StatusMessage = $"Found {DuplicateGroups.Count} duplicate groups";
+            }
+            else
+            {
+                StatusMessage = "No duplicates found in this playlist";
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Error finding duplicates: {ex.Message}";
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private void RemoveAllDuplicates()
+    {
+        if (!DuplicateGroups.Any())
+        {
+            StatusMessage = "No duplicates to remove";
+            return;
+        }
+
+        var deletedCount = 0;
+
+        foreach (var group in DuplicateGroups)
+            // Keep the first track (index 0) and delete the rest
+            for (var i = 1; i < group.Tracks.Count; i++)
+            {
+                DeleteTrack(group.Tracks[i]!.Track);
+                deletedCount++;
+            }
+
+        StatusMessage = $"Removed {deletedCount} duplicate tracks";
+        DuplicateGroups.Clear();
+        IsDuplicateViewVisible = false;
+
+        // Refresh track list
+        ForceRefreshTracks();
+    }
+
+    // Method to delete a specific duplicate from a group
+    private void DeleteDuplicate(Duplicates.DuplicateGroup group, TrackItemViewModel? track)
+    {
+        if (group.Tracks.Count <= 1) return; // Don't delete the last track in the group
+
+        if (track != null)
+        {
+            DeleteTrack(track.Track);
+
+            // Update the duplicate group
+            group.Tracks.Remove(track);
+
+            // If only one track remains, remove the group
+            if (group.Tracks.Count <= 1) DuplicateGroups.Remove(group);
+
+            // Update status
+            StatusMessage = $"Removed duplicate track: {track.Name}";
+        }
+
+        // Refresh track list
+        ForceRefreshTracks();
+    }
+
+    private void InitializeDuplicatesTreeDataGrid()
+    {
+        if (DuplicateGroups == null || !DuplicateGroups.Any())
+            throw new InvalidOperationException(
+                "DuplicateGroups must be populated before initializing the TreeDataGrid.");
+
+        var treeNodes = DuplicateGroups.Cast<ITreeNode>().ToList();
+
+        var source = new HierarchicalTreeDataGridSource<ITreeNode>(treeNodes);
+
+        var albumCoverTemplate = new FuncDataTemplate<ITreeNode>((node, _) =>
+            {
+                var image = new Avalonia.Controls.Image { Width = 40, Height = 40, Stretch = Stretch.Uniform };
+                if (node?.DisplayImage != null) ImageLoader.SetSource(image, node.DisplayImage);
+                return new Border
+                {
+                    Width = 50,
+                    Height = 50,
+                    Margin = new Thickness(5),
+                    VerticalAlignment = VerticalAlignment.Center,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    Child = image
+                };
+            }
+        );
+
+
+        source.Columns.Add(new HierarchicalExpanderColumn<ITreeNode>(
+            new TextColumn<ITreeNode, string>(
+                "Track",
+                node => node.DisplayName,
+                new GridLength(1, GridUnitType.Star)
+            ),
+            node => (node as Duplicates.DuplicateGroup)?.Tracks
+        ));
+
+        source.Columns.Add(new TemplateColumn<ITreeNode>(
+            "Image",
+            albumCoverTemplate,
+            width: new GridLength(70, GridUnitType.Pixel)
+        ));
+
+        source.Columns.Add(
+            new TextColumn<ITreeNode, string>(
+                "Artists",
+                node => node.DisplayArtist,
+                new GridLength(1, GridUnitType.Star)
+            )
+        );
+
+        source.Columns.Add(new TextColumn<ITreeNode, string>(
+            "Album",
+            node => (node as TrackItemViewModel)!.Album.Name,
+            new GridLength(1, GridUnitType.Star)));
+
+        source.Columns.Add(new TextColumn<ITreeNode, string>(
+            "Uri",
+            node => (node as TrackItemViewModel)!.Uri,
+            new GridLength(1, GridUnitType.Star)));
+
+
+        Console.WriteLine("Artist column added.");
+
+        source.Columns.Add(new TextColumn<ITreeNode, string>(
+            "Duration",
+            static node =>
+                (node as TrackItemViewModel)!.Duration,
+            new GridLength(100, GridUnitType.Pixel)));
+
+        Console.WriteLine("Duration column added.");
+
+        source.Columns.Add(new TextColumn<ITreeNode, int>(
+            "Count",
+            static node => (node as Duplicates.DuplicateGroup)!.DuplicateCount,
+            new GridLength(60, GridUnitType.Pixel)));
+
+        Console.WriteLine("Count column added.");
+
+        Console.WriteLine("Template column added.");
+
+        DuplicateGroupsSource = source;
+        Console.WriteLine("DuplicateGroupsSource set.");
+    }
+
+    private void DeleteDuplicateNode(object node)
+    {
+        switch (node)
+        {
+            case TrackItemViewModel track:
+            {
+                // Find the group containing this track
+                var group = DuplicateGroups.FirstOrDefault(g => g.Tracks.Contains(track));
+                if (group != null)
+                    DeleteDuplicate(group, track);
+                break;
+            }
+            case Duplicates.DuplicateGroup group:
+            {
+                // Delete all tracks in the group
+                foreach (var track in group.Tracks)
+                    DeleteTrack(track.Track);
+                // Remove the group from the list
+                DuplicateGroups.Remove(group);
+                break;
+            }
+        }
+    }
+
+    // Cache helper methods
     private async Task<ObservableCollection<FullTrack>> TryLoadTracksFromCacheAsync(string playlistId,
         CancellationToken cancellationToken)
     {
@@ -868,5 +1136,12 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         _currentLoadingCts?.Cancel();
         _currentLoadingCts?.Dispose();
         _currentLoadingCts = new CancellationTokenSource();
+    }
+
+    public interface ITreeNode
+    {
+        string? DisplayName { get; }
+        string? DisplayArtist { get; }
+        string? DisplayImage { get; }
     }
 }

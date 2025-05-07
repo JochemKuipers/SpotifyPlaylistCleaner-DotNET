@@ -17,6 +17,29 @@
         <vm:MainWindowViewModel />
     </Design.DataContext>
 
+    <Window.Resources>
+        <DataTemplate x:DataType="vm:TrackItemViewModel" x:Key="DeleteButtonTemplate">
+            <Button Background="Transparent"
+                    BorderThickness="0"
+                    Width="32"
+                    Height="32"
+                    Padding="0"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Command="{Binding DeleteTrackCommand}"
+                    ToolTip.Tip="Delete Track">
+                <Viewbox Width="16" Height="16"
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Center"
+                         Margin="-2,-2,2,2">
+                    <Path
+                        Data="M6,19C6,20.1 6.9,21 8,21H16C17.1,21 18,20.1 18,19V7H6V19M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19V4Z"
+                        Fill="#ff5252" />
+                </Viewbox>
+            </Button>
+        </DataTemplate>
+    </Window.Resources>
+
     <Grid RowDefinitions="Auto,*">
         <!-- Header -->
         <Border Grid.Row="0" Grid.ColumnSpan="2" Background="#1DB954"
@@ -93,7 +116,7 @@
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,5">
-                                    <!-- Handle potential null or empty Images collection -->
+                                    <!-- Handle a potential null or empty Images collection -->
                                     <Border Width="40" Height="40" Background="#333333" CornerRadius="4">
                                         <Panel>
                                             <!-- Show the first letter as fallback -->
@@ -154,6 +177,7 @@
                                 <!-- Desktop layout (horizontal) -->
                                 <StackPanel Orientation="Horizontal" Spacing="10">
                                     <Button Content="Remove Duplicates"
+                                            Command="{Binding FindDuplicatesCommand}"
                                             Background="#1DB954"
                                             Foreground="White"
                                             Padding="15,8" />
@@ -252,20 +276,57 @@
                             </StackPanel>
                         </Grid>
 
-                        <!-- Track List - Show when not loading -->
+                        <!-- Add this tree view for duplicates. It should be at the same level as your DataGrid -->
+                        <Grid Grid.Row="2" IsVisible="{Binding IsDuplicateViewVisible}" RowDefinitions="Auto,*,Auto">
+
+                            <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="10">
+                                <TextBlock Text="Duplicate Tracks" FontWeight="Bold" FontSize="16"
+                                           VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding DuplicateGroups.Count, StringFormat=': {0} groups found'}"
+                                           VerticalAlignment="Center" />
+                                <Button Content="Back to Tracks"
+                                        Command="{Binding BackToTracksCommand}"
+                                        Margin="20,0,0,0" />
+                            </StackPanel>
+
+                            <TreeDataGrid Grid.Row="1"
+                                          Source="{Binding DuplicateGroupsSource}"
+                                          Margin="0,10,0,10"
+                                          CanUserResizeColumns="True"
+                                          CanUserSortColumns="True">
+                                <TreeDataGrid.Styles>
+                                    <!-- Match the style of your regular DataGrid -->
+                                    <Style Selector="TreeDataGrid > ListBoxItem">
+                                        <Setter Property="Background" Value="Transparent" />
+                                    </Style>
+                                    <Style Selector="TreeDataGrid > DataGridColumnHeader">
+                                        <Setter Property="Background" Value="#212121" />
+                                        <Setter Property="Foreground" Value="#B3B3B3" />
+                                        <Setter Property="FontWeight" Value="SemiBold" />
+                                        <Setter Property="Padding" Value="10,8" />
+                                    </Style>
+                                    <Style Selector="TreeDataGrid > ListBoxItem:selected">
+                                        <Setter Property="Background" Value="#333333" />
+                                    </Style>
+                                </TreeDataGrid.Styles>
+
+                            </TreeDataGrid>
+
+                            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right"
+                                        Margin="0,10,0,0">
+                                <Button Content="Remove All Duplicates"
+                                        Command="{Binding RemoveAllDuplicatesCommand}" />
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Update your DataGrid to only show when the duplicates view is not visible -->
                         <DataGrid Grid.Row="2"
                                   ItemsSource="{Binding FilteredTracks}"
-                                  Background="Transparent"
-                                  RowBackground="Transparent"
-                                  GridLinesVisibility="None"
-                                  BorderThickness="0"
-                                  IsReadOnly="True"
+                                  IsVisible="{Binding IsTracksViewVisible}"
                                   AutoGenerateColumns="False"
-                                  CanUserReorderColumns="True"
-                                  CanUserResizeColumns="True"
-                                  CanUserSortColumns="True"
-                                  ScrollViewer.VerticalScrollBarVisibility="Auto"
-                                  IsVisible="{Binding !IsLoadingTracks}">
+                                  IsReadOnly="True"
+                                  CanUserResizeColumns="True">
+                            <!-- Keep your existing DataGrid configuration -->
                             <DataGrid.Columns>
                                 <!-- Index Column -->
                                 <DataGridTemplateColumn Header="#" Width="Auto" MinWidth="40"
@@ -362,24 +423,8 @@
                                 <DataGridTemplateColumn Header="" Width="Auto" MinWidth="50">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate x:DataType="vm:TrackItemViewModel">
-                                            <Button Background="Transparent"
-                                                    BorderThickness="0"
-                                                    Width="32"
-                                                    Height="32"
-                                                    Padding="0"
-                                                    HorizontalAlignment="Center"
-                                                    VerticalAlignment="Center"
-                                                    Command="{Binding DeleteTrackCommand}"
-                                                    ToolTip.Tip="Delete Track">
-                                                <Viewbox Width="16" Height="16"
-                                                         HorizontalAlignment="Center"
-                                                         VerticalAlignment="Center"
-                                                         Margin="-2,-2,2,2">
-                                                    <Path
-                                                        Data="M6,19C6,20.1 6.9,21 8,21H16C17.1,21 18,20.1 18,19V7H6V19M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19V4Z"
-                                                        Fill="#ff5252" />
-                                                </Viewbox>
-                                            </Button>
+                                            <ContentControl Content="{Binding}"
+                                                            ContentTemplate="{StaticResource DeleteButtonTemplate}" />
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>

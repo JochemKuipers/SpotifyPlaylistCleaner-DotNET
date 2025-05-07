@@ -5,7 +5,7 @@ namespace SpotifyPlaylistCleaner_DotNET.Models;
 
 public static partial class Utils
 {
-    public static string CleanName(string songName)
+    public static string? CleanName(string? songName)
     {
         try
         {
