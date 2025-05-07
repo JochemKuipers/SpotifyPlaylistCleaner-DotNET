@@ -147,8 +147,9 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
             {
                 var search = SearchQuery.Trim().ToLower();
                 _filteredTracks = _trackItems.Where(t =>
-                    t.Name.Contains(search, StringComparison.CurrentCultureIgnoreCase) ||
-                    t.Artists.Any(a => a.Name.Contains(search, StringComparison.CurrentCultureIgnoreCase)));
+                    t.Name != null && (t.Name.Contains(search, StringComparison.CurrentCultureIgnoreCase) ||
+                                       t.Artists.Any(a =>
+                                           a.Name.Contains(search, StringComparison.CurrentCultureIgnoreCase))));
             }
 
             return _filteredTracks;
@@ -842,7 +843,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
             // Keep the first track (index 0) and delete the rest
             for (var i = 1; i < group.Tracks.Count; i++)
             {
-                DeleteTrack(group.Tracks[i]!.Track);
+                DeleteTrack(group.Tracks[i].Track);
                 deletedCount++;
             }
 
@@ -890,7 +891,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         var albumCoverTemplate = new FuncDataTemplate<ITreeNode>((node, _) =>
             {
                 var image = new Avalonia.Controls.Image { Width = 40, Height = 40, Stretch = Stretch.Uniform };
-                if (node?.DisplayImage != null) ImageLoader.SetSource(image, node.DisplayImage);
+                if (node.DisplayImage != null) ImageLoader.SetSource(image, node.DisplayImage);
                 return new Border
                 {
                     Width = 50,
