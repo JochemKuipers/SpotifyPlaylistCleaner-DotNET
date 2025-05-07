@@ -87,12 +87,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         RemoveAllDuplicatesCommand = ReactiveCommand.Create(RemoveAllDuplicates);
         _duplicateGroups = [];
         IsDuplicateViewVisible = false;
-        DeleteDuplicateCommand = ReactiveCommand.Create<TrackItemViewModel>(track =>
-        {
-            var group = DuplicateGroups.FirstOrDefault(g => g.Tracks.Contains(track));
-            if (group != null)
-                DeleteDuplicate(group, track);
-        });
+        DeleteDuplicateCommand = new DelegateCommand<object>(DeleteDuplicateNode);
 
         // Add the new command
         BackToTracksCommand = ReactiveCommand.Create(() =>
@@ -264,7 +259,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     public ICommand FindDuplicatesCommand { get; }
     public ICommand RemoveAllDuplicatesCommand { get; }
 
-    public ICommand DeleteDuplicateCommand { get; }
+    private ICommand DeleteDuplicateCommand { get; }
 
 
     public void Dispose()
@@ -888,10 +883,24 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
 
         var source = new HierarchicalTreeDataGridSource<ITreeNode>(treeNodes);
 
+        var deleteCmd = DeleteDuplicateCommand;
+
+        var deleteTemplate = new FuncDataTemplate<ITreeNode>(
+            // ‹Build›: create a Button for each track
+            (node, _) => new Button
+            {
+                Content = "Delete",
+                Command = deleteCmd,
+                CommandParameter = node,
+                Padding = new Thickness(4, 2),
+                HorizontalAlignment = HorizontalAlignment.Center
+            }
+        );
+
         var albumCoverTemplate = new FuncDataTemplate<ITreeNode>((node, _) =>
             {
                 var image = new Avalonia.Controls.Image { Width = 40, Height = 40, Stretch = Stretch.Uniform };
-                if (node.DisplayImage != null) ImageLoader.SetSource(image, node.DisplayImage);
+                if (node?.DisplayImage != null) ImageLoader.SetSource(image, node.DisplayImage);
                 return new Border
                 {
                     Width = 50,
@@ -938,28 +947,26 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
             node => (node as TrackItemViewModel)!.Uri,
             new GridLength(1, GridUnitType.Star)));
 
-
-        Console.WriteLine("Artist column added.");
-
         source.Columns.Add(new TextColumn<ITreeNode, string>(
             "Duration",
             static node =>
                 (node as TrackItemViewModel)!.Duration,
             new GridLength(100, GridUnitType.Pixel)));
 
-        Console.WriteLine("Duration column added.");
-
         source.Columns.Add(new TextColumn<ITreeNode, int>(
             "Count",
             static node => (node as Duplicates.DuplicateGroup)!.DuplicateCount,
             new GridLength(60, GridUnitType.Pixel)));
 
-        Console.WriteLine("Count column added.");
-
-        Console.WriteLine("Template column added.");
+        source.Columns.Add(
+            new TemplateColumn<ITreeNode>(
+                "Delete",
+                deleteTemplate,
+                width: new GridLength(80, GridUnitType.Pixel)
+            )
+        );
 
         DuplicateGroupsSource = source;
-        Console.WriteLine("DuplicateGroupsSource set.");
     }
 
     private void DeleteDuplicateNode(object node)
@@ -977,7 +984,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
             case Duplicates.DuplicateGroup group:
             {
                 // Delete all tracks in the group
-                foreach (var track in group.Tracks)
+                foreach (var track in group.Tracks.ToList())
                     DeleteTrack(track.Track);
                 // Remove the group from the list
                 DuplicateGroups.Remove(group);

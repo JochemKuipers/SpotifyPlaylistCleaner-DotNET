@@ -20,10 +20,9 @@ public class TrackItemViewModel(FullTrack track, int index, Action<FullTrack> de
         set => this.RaiseAndSetIfChanged(ref _displayIndex, value);
     }
 
-    public string Id => Track.Id;
     public string? Name => Track.Name;
     public IList<SimpleArtist> Artists => Track.Artists;
-    public string? ArtistNames => string.Join(", ", Artists.Select(a => a.Name));
+    private string? ArtistNames => string.Join(", ", Artists.Select(a => a.Name));
 
     public SimpleAlbum Album => Track.Album;
     public string Duration => TimeSpan.FromMilliseconds(Track.DurationMs).ToString(@"hh\:mm\:ss");
