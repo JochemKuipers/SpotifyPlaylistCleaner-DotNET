@@ -65,7 +65,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
 
         if (File.Exists(SpotifyAuth.CredentialsPath)) Task.Run(AuthenticateSpotify);
 
-        // Create cache directory if it doesn't exist
+        // Create a cache directory if it doesn't exist
         if (!Directory.Exists(_cacheFolder)) Directory.CreateDirectory(_cacheFolder);
     }
 
@@ -223,7 +223,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         }
         else
         {
-            // Just update indices if we have the same number of tracks
+            // Update indices if we have the same number of tracks
             for (var i = 0; i < _trackItems.Count; i++)
                 _trackItems[i].DisplayIndex = i + 1;
         }
@@ -268,7 +268,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         if (trackItem != null)
             _trackItems.Remove(trackItem);
 
-        // Remove from tracks collection
+        // Remove from the track collection
         Tracks.Remove(track);
 
         // Reset filtered tracks cache
@@ -357,7 +357,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
 
             var playlistsResponse = await _spotifyClient.Playlists.CurrentUsers();
 
-            // Add initial batch of playlists
+            // Add an initial batch of playlists
             foreach (var playlist in playlistsResponse.Items!.Where(playlist => playlist.Owner?.Id == user.Id))
                 allPlaylists.Add(playlist);
 
@@ -492,7 +492,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
                             allTracks.AddRange(batchTracks);
                             loadedCount += batchTracks.Count;
 
-                            // Batch progress updates - only update UI when significant changes occur
+                            // Batch progress updates - only update the UI when significant changes occur
                             var currentBatchProgress = (int)(loadedCount * 100.0 / totalTracks);
                             if (currentBatchProgress - _lastReportedProgress >= ProgressThreshold ||
                                 currentBatchProgress == 100)
@@ -658,7 +658,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
                             allTracks.AddRange(batchTracks);
                             loadedCount += batchTracks.Count;
 
-                            // Batch progress updates - only update UI when significant changes occur
+                            // Batch progress updates - only update the UI when significant changes occur
                             var currentBatchProgress = (int)(loadedCount * 100.0 / totalTracks);
                             if (currentBatchProgress - _lastReportedProgress >= ProgressThreshold ||
                                 currentBatchProgress == 100)
