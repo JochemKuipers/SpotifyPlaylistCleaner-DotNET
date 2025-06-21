@@ -1,0 +1,96 @@
+name: Build and Publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: Build for ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+        include:
+          - os: windows-latest
+            platform: win-x64
+            extension: .exe
+            artifact_name: SpotifyPlaylistCleaner-Windows
+          - os: macos-latest
+            platform: osx-x64
+            extension: ''
+            artifact_name: SpotifyPlaylistCleaner-macOS
+          - os: ubuntu-latest
+            platform: linux-x64
+            extension: ''
+            artifact_name: SpotifyPlaylistCleaner-Linux
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build application
+        run: |
+          dotnet publish -c Release -r ${{ matrix.platform }} \
+          --self-contained true \
+          -p:PublishSingleFile=true \
+          -p:PublishReadyToRun=true \
+          -p:IncludeNativeLibrariesForSelfExtract=true \
+          -o ./publish/${{ matrix.platform }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ./publish/${{ matrix.platform }}/*${{ matrix.extension }}
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v3
+
+      - name: Get version from tag
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+        shell: bash
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          name: Spotify Playlist Cleaner v${{ steps.get_version.outputs.VERSION }}
+          draft: false
+          prerelease: false
+          files: |
+            SpotifyPlaylistCleaner-Windows/*
+            SpotifyPlaylistCleaner-macOS/*
+            SpotifyPlaylistCleaner-Linux/*
+          body: |
+            # Spotify Playlist Cleaner ${{ steps.get_version.outputs.VERSION }}
+            
+            ## Downloads
+            - [Windows](https://github.com/${{ github.repository }}/releases/download/v${{ steps.get_version.outputs.VERSION }}/SpotifyPlaylistCleaner.exe)
+            - [macOS](https://github.com/${{ github.repository }}/releases/download/v${{ steps.get_version.outputs.VERSION }}/SpotifyPlaylistCleaner)
+            - [Linux](https://github.com/${{ github.repository }}/releases/download/v${{ steps.get_version.outputs.VERSION }}/SpotifyPlaylistCleaner)
+            
+            ## Installation
+            1. Download the appropriate file for your platform
+            2. Make executable (macOS/Linux): `chmod +x SpotifyPlaylistCleaner`
+            3. Run the application
+            
+            For detailed instructions, see the [README](https://github.com/${{ github.repository }}/blob/main/README.md)
