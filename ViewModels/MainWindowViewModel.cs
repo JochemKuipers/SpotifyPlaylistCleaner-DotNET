@@ -434,38 +434,44 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
             {
                 Id = "liked_songs_virtual",
                 Name = "Liked Songs",
-                Description = "Songs you've liked on Spotify on Spotify",
+                Description = "Songs you've liked on Spotify",
                 Images =
                 [
                     new Image
-                    {
-                        Url = "https://t.scdn.co/images/3099b3803ad9496896c43f22fe9be8c4.png"
-                    }
+                {
+                    Url = "https://t.scdn.co/images/3099b3803ad9496896c43f22fe9be8c4.png"
+                }
                 ],
                 // Set owner to current user
                 Owner = new PublicUser { Id = user.Id }
             };
 
-            var allPlaylists = new ObservableCollection<FullPlaylist>
-            {
-                likedSongsPlaylist
-            };
+            var tempPlaylists = new List<FullPlaylist> { likedSongsPlaylist };
 
             var playlistsResponse = await _spotifyClient.Playlists.CurrentUsers();
 
             // Add an initial batch of playlists
             foreach (var playlist in playlistsResponse.Items!.Where(playlist => playlist.Owner?.Id == user.Id))
-                allPlaylists.Add(playlist);
+                tempPlaylists.Add(playlist);
 
             // Handle pagination to get all playlists
             while (playlistsResponse.Next != null)
             {
                 playlistsResponse = await _spotifyClient.NextPage(playlistsResponse);
-                foreach (var playlist in playlistsResponse.Items!) allPlaylists.Add(playlist);
+                foreach (var playlist in playlistsResponse.Items!) tempPlaylists.Add(playlist);
             }
 
-            Playlists = allPlaylists;
-            StatusMessage = $"Loaded {allPlaylists.Count} playlists";
+            // Update the UI on the UI thread
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                Playlists = new ObservableCollection<FullPlaylist>(tempPlaylists);
+                StatusMessage = $"Loaded {tempPlaylists.Count} playlists";
+
+                // Force refresh of filtered playlists
+                _filteredPlaylists = null;
+                _playlistSearchQueryChanged = true;
+                this.RaisePropertyChanged(nameof(FilteredPlaylists));
+            });
         }
         catch (Exception ex)
         {

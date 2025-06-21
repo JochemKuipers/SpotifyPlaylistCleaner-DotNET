@@ -30,7 +30,6 @@
             <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
         </PackageReference>
         <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
-        <PackageReference Include="DotNetEnv" Version="3.1.1" />
         <PackageReference Include="ReactiveUI" Version="20.2.45" />
         <PackageReference Include="SpotifyAPI.Web" Version="7.2.1" />
         <PackageReference Include="SpotifyAPI.Web.Auth" Version="7.2.1" />

@@ -1,6 +1,10 @@
 using System;
 using System.IO;
 using System.Threading.Tasks;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Threading;
 using Newtonsoft.Json;
 using SpotifyAPI.Web;
 using SpotifyAPI.Web.Auth;
@@ -8,19 +12,163 @@ using static SpotifyAPI.Web.Scopes;
 
 namespace SpotifyPlaylistCleaner_DotNET.Models;
 
-
 public static class SpotifyAuth
 {
     public const string CredentialsPath = "credentials.json";
-    private static readonly string? ClientId = Environment.GetEnvironmentVariable("SPOTIFY_CLIENT_ID");
+    private const string ClientIdStoragePath = "spotify_client_id.dat";
     private static readonly EmbedIOAuthServer Server = new(new Uri("http://localhost:8080/callback"), 8080);
+
+    private static string? GetClientId()
+    {
+        // First try to get from secure storage
+        string? clientId = GetClientIdFromStorage();
+        
+        // If not found, prompt the user
+        if (string.IsNullOrEmpty(clientId))
+        {
+            clientId = PromptUserForClientId().GetAwaiter().GetResult();
+            
+            // Save the client ID if user provided one
+            if (!string.IsNullOrEmpty(clientId))
+            {
+                SaveClientIdToStorage(clientId);
+            }
+        }
+        
+        return clientId;
+    }
+
+    private static string? GetClientIdFromStorage()
+    {
+        try
+        {
+            // Simple file-based storage - in a real app, you'd want to encrypt this
+            if (File.Exists(ClientIdStoragePath))
+            {
+                return File.ReadAllText(ClientIdStoragePath);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error reading client ID from storage: {ex.Message}");
+        }
+        
+        return null;
+    }
+    
+    private static void SaveClientIdToStorage(string clientId)
+    {
+        try
+        {
+            // Simple file-based storage - in a real app, you'd want to encrypt this
+            File.WriteAllText(ClientIdStoragePath, clientId);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error saving client ID to storage: {ex.Message}");
+        }
+    }
+
+    private static async Task<string?> PromptUserForClientId()
+    {
+        var taskCompletionSource = new TaskCompletionSource<string?>();
+
+        await Dispatcher.UIThread.InvokeAsync(async () =>
+        {
+            // Create a dialog window to ask for the client ID  
+            var dialog = new Window
+            {
+                Title = "Spotify Client ID Required",
+                Width = 450,
+                Height = 200,
+                WindowStartupLocation = WindowStartupLocation.CenterScreen,
+                CanResize = false
+            };
+
+            var layout = new StackPanel
+            {
+                Margin = new Avalonia.Thickness(20)
+            };
+
+            layout.Children.Add(new TextBlock
+            {
+                Text = "Please enter your Spotify Client ID",
+                Margin = new Avalonia.Thickness(0, 0, 0, 10)
+            });
+
+            layout.Children.Add(new TextBlock
+            {
+                Text = "You can get one from https://developer.spotify.com/dashboard",
+                Margin = new Avalonia.Thickness(0, 0, 0, 10)
+            });
+
+            var clientIdTextBox = new TextBox
+            {
+                Watermark = "Client ID",
+                Margin = new Avalonia.Thickness(0, 0, 0, 20)
+            };
+            layout.Children.Add(clientIdTextBox);
+
+            var buttonsPanel = new StackPanel
+            {
+                Orientation = Avalonia.Layout.Orientation.Horizontal,
+                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                Spacing = 10
+            };
+
+            var cancelButton = new Button
+            {
+                Content = "Cancel",
+                Width = 100
+            };
+
+            var okButton = new Button
+            {
+                Content = "OK",
+                Width = 100,
+                IsDefault = true
+            };
+
+            buttonsPanel.Children.Add(cancelButton);
+            buttonsPanel.Children.Add(okButton);
+            layout.Children.Add(buttonsPanel);
+
+            dialog.Content = layout;
+
+            cancelButton.Click += (s, e) =>
+            {
+                taskCompletionSource.SetResult(null);
+                dialog.Close();
+            };
+
+            okButton.Click += (s, e) =>
+            {
+                taskCompletionSource.SetResult(clientIdTextBox.Text?.Trim());
+                dialog.Close();
+            };
+
+            // Fix: Replace Application.Current.MainWindow with a valid reference to the main window  
+            if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktopLifetime)
+            {
+                await dialog.ShowDialog(desktopLifetime.MainWindow!);
+            }
+            else
+            {
+                throw new InvalidOperationException("Application lifetime is not a desktop style application lifetime.");
+            }
+        });
+
+        return await taskCompletionSource.Task;
+    }
+
+    private static readonly string? ClientId = GetClientId();
 
     public static async Task<SpotifyClient> Authenticate()
     {
         if (string.IsNullOrEmpty(ClientId))
         {
             throw new NullReferenceException(
-              "Please set SPOTIFY_CLIENT_ID via environment variables before starting the program"
+                "Please provide your Spotify Client ID to use this application."
             );
         }
 
@@ -41,11 +189,11 @@ public static class SpotifyAuth
 
         var authenticator = new PKCEAuthenticator(ClientId!, token!);
         authenticator.TokenRefreshed += (sender, tokenResponse) =>
-          File.WriteAllText(CredentialsPath, JsonConvert.SerializeObject(tokenResponse));
+            File.WriteAllText(CredentialsPath, JsonConvert.SerializeObject(tokenResponse));
 
         var config = SpotifyClientConfig.CreateDefault()
-          .WithAuthenticator(authenticator)
-          .WithRetryHandler(new SimpleRetryHandler { RetryTimes = 3 });
+            .WithAuthenticator(authenticator)
+            .WithRetryHandler(new SimpleRetryHandler { RetryTimes = 3 });
 
         var spotify = new SpotifyClient(config);
 
@@ -65,8 +213,8 @@ public static class SpotifyAuth
             {
                 await Server.Stop();
                 var token = await new OAuthClient().RequestToken(
-              new PKCETokenRequest(ClientId!, response.Code, Server.BaseUri, verifier)
-            );
+                    new PKCETokenRequest(ClientId!, response.Code, Server.BaseUri, verifier)
+                );
 
                 await File.WriteAllTextAsync(CredentialsPath, JsonConvert.SerializeObject(token));
                 var client = await StartAndGetClient();
