@@ -43,9 +43,9 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
 
     private readonly TimeSpan _cacheTtl = TimeSpan.FromHours(24);
     private readonly ObservableCollection<TrackItemViewModel> _trackItems = [];
-    
+
     private CancellationTokenSource? _currentLoadingCts;
-    
+
     private ObservableCollection<Duplicates.DuplicateGroup> _duplicateGroups;
 
     private HierarchicalTreeDataGridSource<ITreeNode>? _duplicateGroupsSource;
@@ -121,7 +121,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
             this.RaisePropertyChanged(nameof(FilteredTracks));
         }
     }
-    
+
     public string PlaylistSearchQuery
     {
         get => _playlistSearchQuery;
@@ -309,7 +309,6 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
 
     private void UpdateTrackItems()
     {
-        // Only update if the counts differ or this is the initial load
         if (_trackItems.Count != Tracks.Count || _trackItems.Count == 0)
         {
             _trackItems.Clear();
@@ -318,12 +317,11 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         }
         else
         {
-            // Update indices if we have the same number of tracks
             for (var i = 0; i < _trackItems.Count; i++)
                 _trackItems[i].DisplayIndex = i + 1;
         }
 
-        _filteredTracks = null; // Invalidate cached filtered tracks
+        _filteredTracks = null;
         this.RaisePropertyChanged(nameof(FilteredTracks));
     }
 
@@ -356,66 +354,84 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
 
     private void DeleteTrack(FullTrack track)
     {
-        var cancellationToken = _currentLoadingCts?.Token ?? CancellationToken.None;
-        if (_spotifyClient == null) return;
+        if (_spotifyClient == null || SelectedPlaylist == null)
+            return;
 
-        // Find and remove the track item from the collection
-        var trackItem = _trackItems.FirstOrDefault(t => t.Track == track);
+        var cancellationToken = _currentLoadingCts?.Token ?? CancellationToken.None;
+
+        // First update UI collections
+        var trackItem = _trackItems.FirstOrDefault(t => t.Track.Id == track.Id);
         if (trackItem != null)
             _trackItems.Remove(trackItem);
 
-        // Remove from the track collection
-        Tracks.Remove(track);
+        var trackToRemove = Tracks.FirstOrDefault(t => t.Id == track.Id);
+        if (trackToRemove != null)
+            Tracks.Remove(trackToRemove);
 
-        // Reset filtered tracks cache
         _filteredTracks = null;
         this.RaisePropertyChanged(nameof(FilteredTracks));
 
-        // Update Spotify via API
-        if (SelectedPlaylist == null) return;
+        // Then handle API deletion in background
         if (SelectedPlaylist.Id == "liked_songs_virtual")
+        {
             Task.Run(async () =>
             {
                 try
                 {
-                    await _spotifyClient.Library.RemoveTracks(new LibraryRemoveTracksRequest([track.Id]),
+                    await _spotifyClient.Library.RemoveTracks(
+                        new LibraryRemoveTracksRequest([track.Id]),
                         cancellationToken);
 
-                    // Update cache if enabled
                     if (IsCacheEnabled)
                         await SaveLikedTracksToCacheAsync(Tracks, cancellationToken);
 
-                    StatusMessage = $"Removed '{track.Name}' from your liked songs";
+                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        StatusMessage = $"Removed '{track.Name}' from your liked songs";
+                    });
                 }
                 catch (Exception ex)
                 {
-                    StatusMessage = $"Failed to remove track: {ex.Message}";
+                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        StatusMessage = $"Failed to remove track: {ex.Message}";
+                    });
+                    Console.WriteLine($"API error removing track: {ex.Message}");
                 }
             }, cancellationToken);
-        else
+        }
+        else if (SelectedPlaylist.Id != null)
+        {
             Task.Run(async () =>
             {
                 try
                 {
-                    if (SelectedPlaylist.Id != null)
-                    {
-                        await _spotifyClient.Playlists.RemoveItems(SelectedPlaylist.Id, new PlaylistRemoveItemsRequest
+                    await _spotifyClient.Playlists.RemoveItems(
+                        SelectedPlaylist.Id,
+                        new PlaylistRemoveItemsRequest
                         {
                             Tracks = [new PlaylistRemoveItemsRequest.Item { Uri = track.Uri }]
-                        }, cancellationToken);
+                        },
+                        cancellationToken);
 
-                        // Update cache if enabled
-                        if (IsCacheEnabled && SelectedPlaylist?.Id != null)
-                            await SaveTracksToCacheAsync(SelectedPlaylist.Id, Tracks, cancellationToken);
-                    }
+                    if (IsCacheEnabled)
+                        await SaveTracksToCacheAsync(SelectedPlaylist.Id, Tracks, cancellationToken);
 
-                    StatusMessage = $"Removed '{track.Name}' from playlist";
+                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        StatusMessage = $"Removed '{track.Name}' from playlist";
+                    });
                 }
                 catch (Exception ex)
                 {
-                    StatusMessage = $"Failed to remove track: {ex.Message}";
+                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        StatusMessage = $"Failed to remove track: {ex.Message}";
+                    });
+                    Console.WriteLine($"API error removing track: {ex.Message}");
                 }
             }, cancellationToken);
+        }
     }
 
     private async Task FetchUserPlaylists()
@@ -429,7 +445,6 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
             IsLoadingPlaylists = true;
             StatusMessage = "Loading your playlists...";
 
-            // Create the liked songs virtual playlist and add it first
             var likedSongsPlaylist = new FullPlaylist
             {
                 Id = "liked_songs_virtual",
@@ -442,7 +457,6 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
                     Url = "https://t.scdn.co/images/3099b3803ad9496896c43f22fe9be8c4.png"
                 }
                 ],
-                // Set owner to current user
                 Owner = new PublicUser { Id = user.Id }
             };
 
@@ -450,24 +464,19 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
 
             var playlistsResponse = await _spotifyClient.Playlists.CurrentUsers();
 
-            // Add an initial batch of playlists
             foreach (var playlist in playlistsResponse.Items!.Where(playlist => playlist.Owner?.Id == user.Id))
                 tempPlaylists.Add(playlist);
-
-            // Handle pagination to get all playlists
             while (playlistsResponse.Next != null)
             {
                 playlistsResponse = await _spotifyClient.NextPage(playlistsResponse);
                 foreach (var playlist in playlistsResponse.Items!) tempPlaylists.Add(playlist);
             }
 
-            // Update the UI on the UI thread
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 Playlists = new ObservableCollection<FullPlaylist>(tempPlaylists);
                 StatusMessage = $"Loaded {tempPlaylists.Count} playlists";
 
-                // Force refresh of filtered playlists
                 _filteredPlaylists = null;
                 _playlistSearchQueryChanged = true;
                 this.RaisePropertyChanged(nameof(FilteredPlaylists));
@@ -594,7 +603,6 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
                             allTracks.AddRange(batchTracks);
                             loadedCount += batchTracks.Count;
 
-                            // Batch progress updates - only update the UI when significant changes occur
                             var currentBatchProgress = (int)(loadedCount * 100.0 / totalTracks);
                             if (currentBatchProgress - _lastReportedProgress >= ProgressThreshold ||
                                 currentBatchProgress == 100)
@@ -618,7 +626,6 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
 
             cancellationToken.ThrowIfCancellationRequested();
 
-            // Group UI updates at the end
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 Tracks = new ObservableCollection<FullTrack>(allTracks);
@@ -633,7 +640,6 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         }
         catch (OperationCanceledException)
         {
-            // Operation was canceled, no need to update UI
         }
         catch (Exception ex)
         {
@@ -664,7 +670,6 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
                 LoadingStatusMessage = "Fetching your liked songs...";
             });
 
-            // Stream-based JSON processing for cache loading
             var cachedTracks = await TryLoadLikedTracksFromCacheAsync(cancellationToken);
             if (IsCacheEnabled && cachedTracks.Count > 0)
             {
@@ -760,7 +765,6 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
                             allTracks.AddRange(batchTracks);
                             loadedCount += batchTracks.Count;
 
-                            // Batch progress updates - only update the UI when significant changes occur
                             var currentBatchProgress = (int)(loadedCount * 100.0 / totalTracks);
                             if (currentBatchProgress - _lastReportedProgress >= ProgressThreshold ||
                                 currentBatchProgress == 100)
@@ -788,7 +792,6 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
 
             cancellationToken.ThrowIfCancellationRequested();
 
-            // Group UI updates at the end
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 Tracks = new ObservableCollection<FullTrack>(allTracks);
@@ -798,13 +801,11 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
                 this.RaisePropertyChanged(nameof(FilteredTracks));
             });
 
-            // Stream-based JSON processing for cache saving
             if (IsCacheEnabled)
                 await SaveLikedTracksToCacheAsync(Tracks, cancellationToken);
         }
         catch (OperationCanceledException)
         {
-            // Operation was canceled, no need to update UI
         }
         catch (Exception ex)
         {
@@ -818,7 +819,6 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    // Update the FindDuplicatesAsync method to show the TreeView
     private Task FindDuplicatesAsync()
     {
         if (SelectedPlaylist == null || !_trackItems.Any())
@@ -832,7 +832,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
             StatusMessage = "Finding duplicates...";
 
             var duplicatesFinder = new Duplicates(
-                _trackItems.ToList()
+                [.. _trackItems]
             );
 
             var duplicates = duplicatesFinder.FindAllDuplicates();
@@ -840,10 +840,10 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
             DuplicateGroups.Clear();
             foreach (var group in duplicates) DuplicateGroups.Add(group);
 
-            InitializeDuplicatesTreeDataGrid();
 
             if (DuplicateGroups.Count > 0)
             {
+                InitializeDuplicatesTreeDataGrid();
                 IsDuplicateViewVisible = true;
                 this.RaisePropertyChanged(nameof(IsTracksViewVisible));
                 StatusMessage = $"Found {DuplicateGroups.Count} duplicate groups";
@@ -861,6 +861,18 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         return Task.CompletedTask;
     }
 
+    private void UpdateTrackIndices()
+    {
+        // Re-number all remaining track items with sequential indices
+        for (int i = 0; i < _trackItems.Count; i++)
+        {
+            _trackItems[i].DisplayIndex = i + 1;
+        }
+
+        // Force UI refresh
+        this.RaisePropertyChanged(nameof(FilteredTracks));
+    }
+
     private void RemoveAllDuplicates()
     {
         if (!DuplicateGroups.Any())
@@ -870,21 +882,143 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         }
 
         var deletedCount = 0;
+        var tracksToDelete = new List<(FullTrack Track, string PlaylistId)>();
+        var currentPlaylistId = SelectedPlaylist?.Id;
 
+        // First collect all tracks to delete
         foreach (var group in DuplicateGroups)
-            // Keep the first track (index 0) and delete the rest
-            for (var i = 1; i < group.Tracks.Count; i++)
+        {
+            if (group.Tracks.Count <= 1)
+                continue;
+
+            // Find if the group has any explicit tracks
+            bool hasExplicitTracks = group.Tracks.Any(t => t.Track.Explicit);
+            bool allTracksExplicit = group.Tracks.All(t => t.Track.Explicit);
+
+            // Index of the track to keep (default to 0)
+            int indexToKeep = 0;
+
+            // If there's a mix of explicit and non-explicit tracks, prioritize keeping an explicit one
+            if (hasExplicitTracks && !allTracksExplicit)
             {
-                DeleteTrack(group.Tracks[i].Track);
-                deletedCount++;
+                // Find the first explicit track
+                indexToKeep = group.Tracks.FindIndex(t => t.Track.Explicit);
             }
 
-        StatusMessage = $"Removed {deletedCount} duplicate tracks";
+            // Mark tracks to delete (except the one we're keeping)
+            for (int i = 0; i < group.Tracks.Count; i++)
+            {
+                if (i != indexToKeep)
+                {
+                    tracksToDelete.Add((group.Tracks[i].Track, currentPlaylistId!));
+                    deletedCount++;
+                }
+            }
+        }
+
+        if (tracksToDelete.Count == 0)
+        {
+            StatusMessage = "No tracks to delete after applying rules";
+            return;
+        }
+
+        // First, update the UI collections
+        foreach (var (Track, PlaylistId) in tracksToDelete)
+        {
+            var track = Track;
+
+            // Remove from UI track items
+            var trackItem = _trackItems.FirstOrDefault(t => t.Track.Id == track.Id);
+            if (trackItem != null)
+            {
+                _trackItems.Remove(trackItem);
+            }
+
+            // Remove from tracks collection
+            var trackToRemove = Tracks.FirstOrDefault(t => t.Id == track.Id);
+            if (trackToRemove != null)
+            {
+                Tracks.Remove(trackToRemove);
+            }
+        }
+
+        UpdateTrackIndices();
+
+        // Reset filtered tracks
+        _filteredTracks = null;
+        this.RaisePropertyChanged(nameof(FilteredTracks));
+
+        // Now perform API deletions in background
+        Task.Run(async () =>
+        {
+            var cancellationToken = _currentLoadingCts?.Token ?? CancellationToken.None;
+            int successCount = 0;
+
+            foreach (var (Track, PlaylistId) in tracksToDelete)
+            {
+                try
+                {
+                    var track = Track;
+                    var playlistId = PlaylistId;
+
+                    if (cancellationToken.IsCancellationRequested)
+                        break;
+
+                    if (_spotifyClient == null)
+                        break;
+
+                    if (playlistId == "liked_songs_virtual")
+                    {
+                        await _spotifyClient.Library.RemoveTracks(
+                            new LibraryRemoveTracksRequest([track.Id]),
+                            cancellationToken);
+                    }
+                    else if (playlistId != null)
+                    {
+                        await _spotifyClient.Playlists.RemoveItems(
+                            playlistId,
+                            new PlaylistRemoveItemsRequest
+                            {
+                                Tracks = [new PlaylistRemoveItemsRequest.Item { Uri = track.Uri }]
+                            },
+                            cancellationToken);
+                    }
+
+                    successCount++;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error removing track {Track.Name}: {ex.Message}");
+                    // Continue with other tracks even if one fails
+                }
+            }
+
+            // Update cache with remaining tracks
+            try
+            {
+                if (IsCacheEnabled && currentPlaylistId != null)
+                {
+                    if (currentPlaylistId == "liked_songs_virtual")
+                        await SaveLikedTracksToCacheAsync(Tracks, cancellationToken);
+                    else
+                        await SaveTracksToCacheAsync(currentPlaylistId, Tracks, cancellationToken);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error updating cache: {ex.Message}");
+            }
+
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                StatusMessage = $"Successfully removed {successCount} of {deletedCount} duplicate tracks using smart selection";
+            });
+        });
+
+        // Clean up UI state
         DuplicateGroups.Clear();
         IsDuplicateViewVisible = false;
-
-        // Refresh track list
-        ForceRefreshTracks();
+        this.RaisePropertyChanged(nameof(IsTracksViewVisible));
     }
 
     private void InitializeDuplicatesTreeDataGrid()
@@ -900,7 +1034,6 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         var deleteCmd = DeleteDuplicateCommand;
 
         var deleteTemplate = new FuncDataTemplate<ITreeNode>(
-            // ‹Build›: create a Button for each track
             (node, _) => new Button
             {
                 Content = "Delete",
@@ -988,43 +1121,85 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         switch (node)
         {
             case TrackItemViewModel track:
-                // Find which group this track belongs to
                 var parentGroup = DuplicateGroups.FirstOrDefault(g => g.Tracks.Contains(track));
                 if (parentGroup != null)
                 {
                     DeleteTrack(track.Track);
 
-                    // Update the duplicate group
                     parentGroup.Tracks.Remove(track);
 
-                    // If only one track remains, remove the group
                     if (parentGroup.Tracks.Count <= 1)
                         DuplicateGroups.Remove(parentGroup);
 
-                    // Rebuild the TreeDataGrid to reflect changes
-                    InitializeDuplicatesTreeDataGrid();
+                    if (DuplicateGroups.Count > 0)
+                    {
+                        try
+                        {
+                            InitializeDuplicatesTreeDataGrid();
+                        }
+                        catch (InvalidOperationException)
+                        {
+                            // If there are no more duplicates, go back to track view
+                            DuplicateGroups.Clear();
+                            IsDuplicateViewVisible = false;
+                            this.RaisePropertyChanged(nameof(IsTracksViewVisible));
+                            Dispatcher.UIThread.Post(() => ForceRefreshTracks(false), DispatcherPriority.Background);
+                            return;
+                        }
+                    }
+                    else
+                    {
+                        // If there are no more duplicates, go back to track view
+                        IsDuplicateViewVisible = false;
+                        this.RaisePropertyChanged(nameof(IsTracksViewVisible));
+                        Dispatcher.UIThread.Post(() => ForceRefreshTracks(false), DispatcherPriority.Background);
+                        return;
+                    }
 
                     StatusMessage = $"Removed track: {track.Name}";
                 }
-
                 break;
 
             case Duplicates.DuplicateGroup group:
-                // Delete all tracks except the first one
+                var tracksToDelete = new List<TrackItemViewModel>();
                 for (var i = 1; i < group.Tracks.Count; i++)
-                    DeleteTrack(group.Tracks[i].Track);
+                    tracksToDelete.Add(group.Tracks[i]);
+
+                foreach (var trackToDelete in tracksToDelete)
+                    DeleteTrack(trackToDelete.Track);
 
                 DuplicateGroups.Remove(group);
 
-                // Rebuild the TreeDataGrid to reflect changes
-                InitializeDuplicatesTreeDataGrid();
+                if (DuplicateGroups.Count > 0)
+                {
+                    try
+                    {
+                        InitializeDuplicatesTreeDataGrid();
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        // If there are no more duplicates, go back to track view
+                        DuplicateGroups.Clear();
+                        IsDuplicateViewVisible = false;
+                        this.RaisePropertyChanged(nameof(IsTracksViewVisible));
+                        Dispatcher.UIThread.Post(() => ForceRefreshTracks(false), DispatcherPriority.Background);
+                        return;
+                    }
+                }
+                else
+                {
+                    // If there are no more duplicates, go back to track view
+                    IsDuplicateViewVisible = false;
+                    this.RaisePropertyChanged(nameof(IsTracksViewVisible));
+                    Dispatcher.UIThread.Post(() => ForceRefreshTracks(false), DispatcherPriority.Background);
+                    return;
+                }
 
                 StatusMessage = "Removed duplicate group";
                 break;
         }
     }
 
-    // Cache helper methods
     private async Task<ObservableCollection<FullTrack>> TryLoadTracksFromCacheAsync(string playlistId,
         CancellationToken cancellationToken)
     {
@@ -1052,14 +1227,12 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         catch (Exception ex)
         {
             Console.WriteLine($"Cache loading error for {cacheFile}: {ex.Message}");
-            // Delete corrupted cache file
             try
             {
                 File.Delete(cacheFile);
             }
             catch
             {
-                // Ignore deletion errors
             }
         }
 
@@ -1093,14 +1266,12 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         catch (Exception ex)
         {
             Console.WriteLine($"Cache loading error for {cacheFile}: {ex.Message}");
-            // Delete corrupted cache file
             try
             {
                 File.Delete(cacheFile);
             }
             catch
             {
-                // Ignore deletion errors
             }
         }
 
@@ -1140,34 +1311,70 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     private void ForceRefreshTracks(bool refreshAll = false)
     {
         SearchQuery = "";
+
         if (refreshAll)
-            // Clear all cache files
+        {
             try
             {
-                foreach (var file in Directory.GetFiles(_cacheFolder, "*.json")) File.Delete(file);
+                foreach (var file in Directory.GetFiles(_cacheFolder, "*.json"))
+                    File.Delete(file);
                 StatusMessage = "Cache cleared. Refreshing data...";
             }
-            catch
+            catch (Exception ex)
             {
                 StatusMessage = "Failed to clear cache.";
+                Console.WriteLine($"Error clearing cache: {ex.Message}");
             }
+        }
 
-        // Reload the current playlist or liked songs without using cache
         var temp = IsCacheEnabled;
         IsCacheEnabled = false;
 
-        if (SelectedPlaylist != null)
-            Task.Run(async () =>
+        var currentPlaylist = SelectedPlaylist;
+        if (currentPlaylist == null)
+        {
+            StatusMessage = "No playlist selected to refresh";
+            IsCacheEnabled = temp;
+            return;
+        }
+
+        CancelOngoingOperations();
+
+        _tracks.Clear();
+        _trackItems.Clear();
+        _filteredTracks = null;
+        this.RaisePropertyChanged(nameof(FilteredTracks));
+
+        Task.Run(async () =>
+        {
+            try
             {
-                if (SelectedPlaylist.Id == "liked_songs_virtual")
+                if (currentPlaylist.Id == "liked_songs_virtual")
                     await FetchLikedTracks();
                 else
-                    await FetchPlaylistTracks(SelectedPlaylist);
+                    await FetchPlaylistTracks(currentPlaylist);
 
-                // Restore cache setting after refresh
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    StatusMessage = $"Refreshed tracks for '{currentPlaylist.Name}'";
+                });
+            }
+            catch (Exception ex)
+            {
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    StatusMessage = $"Error refreshing tracks: {ex.Message}";
+                });
+                Console.WriteLine($"Error in ForceRefreshTracks: {ex.Message}");
+            }
+            finally
+            {
                 IsCacheEnabled = temp;
-                return Task.CompletedTask;
-            });
+            }
+        });
+
+        IsDuplicateViewVisible = false;
+        this.RaisePropertyChanged(nameof(IsTracksViewVisible));
     }
 
     private void CancelOngoingOperations()

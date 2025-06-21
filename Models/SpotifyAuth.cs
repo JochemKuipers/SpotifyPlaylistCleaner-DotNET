@@ -1,5 +1,8 @@
 using System;
 using System.IO;
+using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -16,19 +19,104 @@ public static class SpotifyAuth
 {
     public const string CredentialsPath = "credentials.json";
     private const string ClientIdStoragePath = "spotify_client_id.dat";
-    private static readonly EmbedIOAuthServer Server = new(new Uri("http://localhost:8080/callback"), 8080);
+    private static readonly EmbedIOAuthServer Server = new(new Uri("http://127.0.0.1:3000/callback"), 3000);
+
+    // Updated EncryptString method to handle cross-platform compatibility
+    private static string EncryptString(string plainText)
+    {
+        if (string.IsNullOrEmpty(plainText))
+            return string.Empty;
+
+        try
+        {
+            byte[] plainBytes = Encoding.UTF8.GetBytes(plainText);
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                // Use DPAPI for Windows
+                byte[] encryptedBytes = ProtectedData.Protect(
+                    plainBytes,
+                    null,
+                    DataProtectionScope.CurrentUser);
+
+                return Convert.ToBase64String(encryptedBytes);
+            }
+            else
+            {
+                // Use AES for non-Windows platforms
+                using var aes = Aes.Create();
+                aes.GenerateKey();
+                aes.GenerateIV();
+
+                using var encryptor = aes.CreateEncryptor();
+                byte[] encryptedBytes = encryptor.TransformFinalBlock(plainBytes, 0, plainBytes.Length);
+
+                // Combine key, IV, and encrypted data for storage
+                return Convert.ToBase64String(aes.Key) + ":" + Convert.ToBase64String(aes.IV) + ":" + Convert.ToBase64String(encryptedBytes);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error encrypting data: {ex.Message}");
+            return string.Empty;
+        }
+    }
+
+    // Updated DecryptString method to handle cross-platform compatibility
+    private static string DecryptString(string encryptedText)
+    {
+        if (string.IsNullOrEmpty(encryptedText))
+            return string.Empty;
+
+        try
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                // Use DPAPI for Windows
+                byte[] encryptedBytes = Convert.FromBase64String(encryptedText);
+                byte[] plainBytes = ProtectedData.Unprotect(
+                    encryptedBytes,
+                    null,
+                    DataProtectionScope.CurrentUser);
+
+                return Encoding.UTF8.GetString(plainBytes);
+            }
+            else
+            {
+                // Use AES for non-Windows platforms
+                var parts = encryptedText.Split(':');
+                if (parts.Length != 3)
+                    throw new FormatException("Invalid encrypted text format.");
+
+                byte[] key = Convert.FromBase64String(parts[0]);
+                byte[] iv = Convert.FromBase64String(parts[1]);
+                byte[] encryptedBytes = Convert.FromBase64String(parts[2]);
+
+                using var aes = Aes.Create();
+                aes.Key = key;
+                aes.IV = iv;
+
+                using var decryptor = aes.CreateDecryptor();
+                byte[] plainBytes = decryptor.TransformFinalBlock(encryptedBytes, 0, encryptedBytes.Length);
+
+                return Encoding.UTF8.GetString(plainBytes);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error decrypting data: {ex.Message}");
+            return string.Empty;
+        }
+    }
 
     private static string? GetClientId()
     {
-        // First try to get from secure storage
         string? clientId = GetClientIdFromStorage();
         
-        // If not found, prompt the user
         if (string.IsNullOrEmpty(clientId))
         {
             clientId = PromptUserForClientId().GetAwaiter().GetResult();
             
-            // Save the client ID if user provided one
             if (!string.IsNullOrEmpty(clientId))
             {
                 SaveClientIdToStorage(clientId);
@@ -42,26 +130,26 @@ public static class SpotifyAuth
     {
         try
         {
-            // Simple file-based storage - in a real app, you'd want to encrypt this
             if (File.Exists(ClientIdStoragePath))
             {
-                return File.ReadAllText(ClientIdStoragePath);
+                string encryptedClientId = File.ReadAllText(ClientIdStoragePath);
+                return DecryptString(encryptedClientId);
             }
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error reading client ID from storage: {ex.Message}");
         }
-        
+
         return null;
     }
-    
+
     private static void SaveClientIdToStorage(string clientId)
     {
         try
         {
-            // Simple file-based storage - in a real app, you'd want to encrypt this
-            File.WriteAllText(ClientIdStoragePath, clientId);
+            string encryptedClientId = EncryptString(clientId);
+            File.WriteAllText(ClientIdStoragePath, encryptedClientId);
         }
         catch (Exception ex)
         {
@@ -69,13 +157,14 @@ public static class SpotifyAuth
         }
     }
 
+
+
     private static async Task<string?> PromptUserForClientId()
     {
         var taskCompletionSource = new TaskCompletionSource<string?>();
 
         await Dispatcher.UIThread.InvokeAsync(async () =>
         {
-            // Create a dialog window to ask for the client ID  
             var dialog = new Window
             {
                 Title = "Spotify Client ID Required",
@@ -147,7 +236,6 @@ public static class SpotifyAuth
                 dialog.Close();
             };
 
-            // Fix: Replace Application.Current.MainWindow with a valid reference to the main window  
             if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktopLifetime)
             {
                 await dialog.ShowDialog(desktopLifetime.MainWindow!);

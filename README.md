@@ -46,13 +46,16 @@ dotnet run
 
 ## Configuration
 
-Create a `.env` file in the project root directory with your Spotify API credentials:
+The application will prompt you for your Spotify Client ID on first run. 
 
-```
-SPOTIFY_CLIENT_ID=your-client-id
-```
+To get your Client ID:
+1. Go to the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard/)
+2. Log in with your Spotify account
+3. Create a new application
+4. Set the redirect URI to `http://127.0.0.1:3000/callback`
+5. Copy the Client ID to use in the application
 
-You'll need to obtain your Client ID from the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard/).
+Your credentials will be securely stored locally for future use.
 
 ## License
 

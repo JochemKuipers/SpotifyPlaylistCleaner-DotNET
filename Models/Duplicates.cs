@@ -32,8 +32,8 @@ public class Duplicates(
 
             var duplicateEntries = groupedTracks.Where(kvp => kvp.Value.Count > 1).ToList();
 
-            return duplicateEntries.Select(kvp => kvp.Value).Select(tracksInGroup => new DuplicateGroup
-                { Track = tracksInGroup[0], Tracks = [..tracksInGroup] }).ToList();
+            return [.. duplicateEntries.Select(kvp => kvp.Value).Select(tracksInGroup => new DuplicateGroup
+            { Track = tracksInGroup[0], Tracks = [.. tracksInGroup] })];
         }
         catch (Exception e)
         {
@@ -43,7 +43,7 @@ public class Duplicates(
     }
 
 
-    private List<DuplicateGroup> FindExactDuplicates(List<DuplicateGroup> duplicatesGrouped)
+    private static List<DuplicateGroup> FindExactDuplicates(List<DuplicateGroup> duplicatesGrouped)
     {
         try
         {
