@@ -43,23 +43,18 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
 
     private readonly TimeSpan _cacheTtl = TimeSpan.FromHours(24);
     private readonly ObservableCollection<TrackItemViewModel> _trackItems = [];
-
-    // Add a command to go back to the regular tracks view
-
+    
     private CancellationTokenSource? _currentLoadingCts;
-
-    // Add this property
-
+    
     private ObservableCollection<Duplicates.DuplicateGroup> _duplicateGroups;
 
-    // Update the property type to use ITreeNode
     private HierarchicalTreeDataGridSource<ITreeNode>? _duplicateGroupsSource;
 
     private IEnumerable<TrackItemViewModel>? _filteredTracks;
+    private IEnumerable<FullPlaylist>? _filteredPlaylists;
     private bool _isAuthenticated;
     private bool _isAuthenticating;
 
-    // Update the IsDuplicateViewVisible property to properly notify changes
     private bool _isDuplicateViewVisible;
     private bool _isLoadingPlaylists;
     private bool _isLoadingTracks;
@@ -69,8 +64,11 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     private ObservableCollection<FullPlaylist> _playlists = [];
 
     private string _searchQuery = "";
+    private string _playlistSearchQuery = "";
+
 
     private bool _searchQueryChanged;
+    private bool _playlistSearchQueryChanged;
     private FullPlaylist? _selectedPlaylist;
     private SpotifyClient? _spotifyClient;
     private string _statusMessage = "";
@@ -89,7 +87,6 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         IsDuplicateViewVisible = false;
         DeleteDuplicateCommand = new DelegateCommand<object>(DeleteDuplicateNode);
 
-        // Add the new command
         BackToTracksCommand = ReactiveCommand.Create(() =>
         {
             IsDuplicateViewVisible = false;
@@ -99,7 +96,6 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
 
         if (File.Exists(SpotifyAuth.CredentialsPath)) Task.Run(AuthenticateSpotify);
 
-        // Create a cache directory if it doesn't exist
         if (!Directory.Exists(_cacheFolder)) Directory.CreateDirectory(_cacheFolder);
     }
 
@@ -111,7 +107,6 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         set => this.RaiseAndSetIfChanged(ref _isDuplicateViewVisible, value);
     }
 
-    // Add a property to control the visibility of the regular tracks view
     public bool IsTracksViewVisible => !IsDuplicateViewVisible;
 
     public ICommand BackToTracksCommand { get; }
@@ -124,6 +119,17 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
             this.RaiseAndSetIfChanged(ref _searchQuery, value);
             _searchQueryChanged = true;
             this.RaisePropertyChanged(nameof(FilteredTracks));
+        }
+    }
+    
+    public string PlaylistSearchQuery
+    {
+        get => _playlistSearchQuery;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _playlistSearchQuery, value);
+            _playlistSearchQueryChanged = true;
+            this.RaisePropertyChanged(nameof(FilteredPlaylists));
         }
     }
 
@@ -148,6 +154,28 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
             }
 
             return _filteredTracks;
+        }
+    }
+
+    public IEnumerable<FullPlaylist> FilteredPlaylists
+    {
+        get
+        {
+            if (_filteredPlaylists != null && !_playlistSearchQueryChanged) return _filteredPlaylists;
+            _playlistSearchQueryChanged = false;
+
+            if (string.IsNullOrWhiteSpace(PlaylistSearchQuery))
+            {
+                _filteredPlaylists = Playlists;
+            }
+            else
+            {
+                var search = PlaylistSearchQuery.Trim().ToLower();
+                _filteredPlaylists = Playlists.Where(p =>
+                    p.Name != null && p.Name.Contains(search, StringComparison.CurrentCultureIgnoreCase));
+            }
+
+            return _filteredPlaylists;
         }
     }
 
@@ -224,10 +252,15 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         private set => this.RaiseAndSetIfChanged(ref _statusMessage, value);
     }
 
-    public ObservableCollection<FullPlaylist> Playlists
+    private ObservableCollection<FullPlaylist> Playlists
     {
         get => _playlists;
-        private set => this.RaiseAndSetIfChanged(ref _playlists, value);
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _playlists, value);
+            this.RaisePropertyChanged(nameof(FilteredPlaylists));
+        }
+
     }
 
     private ObservableCollection<FullTrack> Tracks
@@ -308,6 +341,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
             IsAuthenticated = true;
 
             await FetchUserPlaylists();
+            this.RaisePropertyChanged(nameof(FilteredPlaylists));
         }
         catch (Exception ex)
         {

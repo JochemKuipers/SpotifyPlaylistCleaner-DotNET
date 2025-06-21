@@ -100,6 +100,19 @@
                     MinWidth="150"
                     Width="250">
                 <DockPanel>
+                    
+                    <!-- Search Bar -->
+                    <TextBox DockPanel.Dock="Top"
+                             Text="{Binding PlaylistSearchQuery}"
+                             Watermark="Search playlists..."
+                             VerticalAlignment="Center"
+                             Background="#333333"
+                             BorderThickness="0"
+                             Padding="10,8,10,8"
+                             Foreground="White"
+                             CaretBrush="White" />
+                        
+                    
                     <TextBlock DockPanel.Dock="Top" Text="Your Playlists" FontSize="16" FontWeight="SemiBold"
                                Margin="0,0,0,10" Foreground="White" />
 
@@ -107,7 +120,7 @@
                                  Height="4" Margin="0,5,0,10" Foreground="#1DB954" />
 
                     <!-- Playlists List - Add SelectedItem binding -->
-                    <ListBox ItemsSource="{Binding Playlists}"
+                    <ListBox ItemsSource="{Binding FilteredPlaylists}"
                              SelectedItem="{Binding SelectedPlaylist}"
                              SelectionMode="Toggle"
                              Background="Transparent"
