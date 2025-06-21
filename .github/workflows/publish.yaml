@@ -40,12 +40,7 @@ jobs:
 
       - name: Build application
         run: |
-          dotnet publish -c Release -r ${{ matrix.platform }} \
-          --self-contained true \
-          -p:PublishSingleFile=true \
-          -p:PublishReadyToRun=true \
-          -p:IncludeNativeLibrariesForSelfExtract=true \
-          -o ./publish/${{ matrix.platform }}
+          dotnet publish -c Release -r ${{ matrix.platform }} --self-contained true -p:PublishSingleFile=true -p:PublishReadyToRun=true -p:IncludeNativeLibrariesForSelfExtract=true -o ./publish/${{ matrix.platform }}
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4.6.2
