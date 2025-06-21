@@ -5,6 +5,9 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:asyncImage="using:AsyncImageLoader"
         xmlns:converters="using:SpotifyPlaylistCleaner_DotNET.Converters"
+        xmlns:models="using:SpotifyPlaylistCleaner_DotNET.Models"
+        xmlns:tdc="using:Avalonia.Controls.Models.TreeDataGrid"
+        xmlns:td="using:Avalonia.Controls.TreeDataGrid"
         mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="600"
         MinWidth="800" MinHeight="500"
         x:Class="SpotifyPlaylistCleaner_DotNET.Views.MainWindow"
@@ -18,7 +21,7 @@
     </Design.DataContext>
 
     <Window.Resources>
-        <DataTemplate x:DataType="vm:TrackItemViewModel" x:Key="DeleteButtonTemplate">
+        <DataTemplate x:DataType="models:TrackModel" x:Key="DeleteButtonTemplate">
             <Button Background="Transparent"
                     BorderThickness="0"
                     Width="32"
@@ -26,7 +29,8 @@
                     Padding="0"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
-                    Command="{Binding DeleteTrackCommand}"
+                    Command="{Binding $parent[DataGrid].((vm:MainWindowViewModel)DataContext).TrackListViewModel.DeleteTrackCommand}"
+                    CommandParameter="{Binding}"
                     ToolTip.Tip="Delete Track">
                 <Viewbox Width="16" Height="16"
                          HorizontalAlignment="Center"
@@ -64,8 +68,7 @@
                     <!-- Desktop layout (horizontal) -->
                     <StackPanel Orientation="Horizontal" Spacing="10">
                         <!-- Refresh Cache Button -->
-                        <Button Command="{Binding RefreshTracksCommand}"
-                                CommandParameter="{Binding SelectedPlaylist, Converter={x:Static ObjectConverters.IsNull}}"
+                        <Button Command="{Binding TrackListViewModel.RefreshTracksCommand}"
                                 IsEnabled="{Binding IsAuthenticated}"
                                 ToolTip.Tip="Refresh Tracks"
                                 Padding="10,5"
@@ -103,31 +106,31 @@
                     
                     <!-- Search Bar -->
                     <TextBox DockPanel.Dock="Top"
-                             Text="{Binding PlaylistSearchQuery}"
+                             Text="{Binding PlaylistViewModel.PlaylistSearchQuery}"
                              Watermark="Search playlists..."
                              VerticalAlignment="Center"
                              Background="#333333"
                              BorderThickness="0"
-                             Padding="10,8,10,8"
+                             Padding="10"
                              Foreground="White"
                              CaretBrush="White" />
                         
                     
                     <TextBlock DockPanel.Dock="Top" Text="Your Playlists" FontSize="16" FontWeight="SemiBold"
-                               Margin="0,0,0,10" Foreground="White" />
+                               Margin="10" Foreground="White" HorizontalAlignment="Center" />
 
-                    <ProgressBar DockPanel.Dock="Top" IsIndeterminate="True" IsVisible="{Binding IsLoadingPlaylists}"
+                    <ProgressBar DockPanel.Dock="Top" IsIndeterminate="True" IsVisible="{Binding PlaylistViewModel.IsLoadingPlaylists}"
                                  Height="4" Margin="0,5,0,10" Foreground="#1DB954" />
 
                     <!-- Playlists List - Add SelectedItem binding -->
-                    <ListBox ItemsSource="{Binding FilteredPlaylists}"
-                             SelectedItem="{Binding SelectedPlaylist}"
+                    <ListBox ItemsSource="{Binding PlaylistViewModel.FilteredPlaylists}"
+                             SelectedItem="{Binding PlaylistViewModel.SelectedPlaylist}"
                              SelectionMode="Toggle"
                              Background="Transparent"
                              Padding="0"
                              IsVisible="{Binding IsAuthenticated}">
                         <ListBox.ItemTemplate>
-                            <DataTemplate>
+                            <DataTemplate x:DataType="models:PlaylistModel">
                                 <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,5">
                                     <!-- Handle a potential null or empty Images collection -->
                                     <Border Width="40" Height="40" Background="#333333" CornerRadius="4">
@@ -141,9 +144,9 @@
 
                                             <!-- Show image if available, it will overlay the text -->
                                             <Image
-                                                asyncImage:ImageLoader.Source="{Binding Images[0].Url, FallbackValue=''}"
+                                                asyncImage:ImageLoader.Source="{Binding ImageUrl, FallbackValue=''}"
                                                 Stretch="UniformToFill"
-                                                IsVisible="{Binding Images, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                                IsVisible="{Binding ImageUrl, Converter={x:Static ObjectConverters.IsNotNull}}" />
                                         </Panel>
                                     </Border>
                                     <TextBlock Text="{Binding Name}" VerticalAlignment="Center" Foreground="White" />
@@ -162,7 +165,7 @@
                 <Grid RowDefinitions="Auto,*">
                     <!-- Content Header - Show selected playlist name -->
                     <TextBlock Grid.Row="0"
-                               Text="{Binding SelectedPlaylist.Name, FallbackValue='Select a playlist to clean'}"
+                               Text="{Binding TrackListViewModel.CurrentPlaylist.Name, FallbackValue='Select a playlist to clean'}"
                                FontSize="24"
                                TextTrimming="CharacterEllipsis"
                                TextWrapping="NoWrap"
@@ -173,12 +176,12 @@
 
                     <!-- Playlist content when selected -->
                     <Grid Grid.Row="1"
-                          IsVisible="{Binding SelectedPlaylist, Converter={x:Static ObjectConverters.IsNotNull}}"
+                          IsVisible="{Binding TrackListViewModel.CurrentPlaylist, Converter={x:Static ObjectConverters.IsNotNull}}"
                           RowDefinitions="Auto,Auto,*">
 
                         <!-- Description -->
                         <TextBlock Grid.Row="0"
-                                   Text="{Binding SelectedPlaylist.Description, FallbackValue='No description available'}"
+                                   Text="{Binding TrackListViewModel.CurrentPlaylist.Description, FallbackValue='No description available'}"
                                    Foreground="#B3B3B3"
                                    Margin="0,0,0,15"
                                    TextWrapping="Wrap" />
@@ -195,7 +198,7 @@
                                             Foreground="White"
                                             Padding="15,8" />
                                     <Button Content="Reset Filters"
-                                            Command="{Binding ResetFiltersCommand}"
+                                            Command="{Binding TrackListViewModel.ResetFiltersCommand}"
                                             Background="#333333"
                                             Foreground="White"
                                             Padding="15,8" />
@@ -224,7 +227,7 @@
 
                                     <!-- Search TextBox -->
                                     <TextBox Grid.Column="1"
-                                             Text="{Binding SearchQuery}"
+                                             Text="{Binding TrackListViewModel.SearchQuery}"
                                              Watermark="Search tracks..."
                                              VerticalAlignment="Center"
                                              Background="Transparent"
@@ -240,7 +243,7 @@
                         <Grid Grid.Row="2"
                               VerticalAlignment="Center"
                               HorizontalAlignment="Center"
-                              IsVisible="{Binding IsLoadingTracks}">
+                              IsVisible="{Binding TrackListViewModel.IsLoadingTracks}">
                             <StackPanel Spacing="20" Width="300">
                                 <!-- Spinner with animation -->
                                 <Panel HorizontalAlignment="Center" Margin="0,0,0,10">
@@ -270,45 +273,43 @@
                                         </Border.Styles>
                                     </Border>
 
-                                    <TextBlock Text="{Binding LoadingProgress, StringFormat=\{0\}%}"
+                                    <TextBlock Text="{Binding TrackListViewModel.LoadingProgress, StringFormat=\{0\}%}"
                                                HorizontalAlignment="Center"
                                                VerticalAlignment="Center"
                                                Foreground="White" />
                                 </Panel>
 
                                 <!-- Progress Bar -->
-                                <ProgressBar Value="{Binding LoadingProgress}"
+                                <ProgressBar Value="{Binding TrackListViewModel.LoadingProgress}"
                                              Maximum="100"
                                              Height="6"
                                              Foreground="#1DB954" />
 
                                 <!-- Status Text -->
-                                <TextBlock Text="{Binding LoadingStatusMessage}"
+                                <TextBlock Text="{Binding TrackListViewModel.LoadingStatusMessage}"
                                            HorizontalAlignment="Center"
                                            Foreground="#B3B3B3" />
                             </StackPanel>
                         </Grid>
 
-                        <!-- Add this tree view for duplicates. It should be at the same level as your DataGrid -->
-                        <Grid Grid.Row="2" IsVisible="{Binding IsDuplicateViewVisible}" RowDefinitions="Auto,*,Auto">
-
+                        <Grid Grid.Row="2" IsVisible="{Binding DuplicatesViewModel.IsDuplicatesViewVisible}" RowDefinitions="Auto,*,Auto">
                             <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="10">
                                 <TextBlock Text="Duplicate Tracks" FontWeight="Bold" FontSize="16"
                                            VerticalAlignment="Center" />
-                                <TextBlock Text="{Binding DuplicateGroups.Count, StringFormat=': {0} groups found'}"
+                                <TextBlock Text="{Binding DuplicatesViewModel.DuplicateGroups.Count, StringFormat=': {0} groups found'}"
                                            VerticalAlignment="Center" />
                                 <Button Content="Back to Tracks"
-                                        Command="{Binding BackToTracksCommand}"
+                                        Command="{Binding DuplicatesViewModel.BackToTracksCommand}"
                                         Margin="20,0,0,0" />
                             </StackPanel>
 
-                            <TreeDataGrid Grid.Row="1"
-                                          Source="{Binding DuplicateGroupsSource}"
-                                          Margin="0,10,0,10"
-                                          CanUserResizeColumns="True"
-                                          CanUserSortColumns="True">
+                            <TreeDataGrid Grid.Row="1" 
+                                             Source="{Binding DuplicatesViewModel.Source}" 
+                                             Margin="0,10,0,10"
+                                             CanUserResizeColumns="True"
+                                             CanUserSortColumns="True"
+                                             Background="Transparent">
                                 <TreeDataGrid.Styles>
-                                    <!-- Match the style of your regular DataGrid -->
                                     <Style Selector="TreeDataGrid > ListBoxItem">
                                         <Setter Property="Background" Value="Transparent" />
                                     </Style>
@@ -322,20 +323,19 @@
                                         <Setter Property="Background" Value="#333333" />
                                     </Style>
                                 </TreeDataGrid.Styles>
-
                             </TreeDataGrid>
 
                             <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right"
                                         Margin="0,10,0,0">
                                 <Button Content="Remove All Duplicates"
-                                        Command="{Binding RemoveAllDuplicatesCommand}" />
+                                        Command="{Binding DuplicatesViewModel.RemoveAllDuplicatesCommand}" />
                             </StackPanel>
                         </Grid>
 
                         <!-- Update your DataGrid to only show when the duplicates view is not visible -->
                         <DataGrid Grid.Row="2"
-                                  ItemsSource="{Binding FilteredTracks}"
-                                  IsVisible="{Binding IsTracksViewVisible}"
+                                  ItemsSource="{Binding TrackListViewModel.FilteredTracks}"
+                                  IsVisible="{Binding DuplicatesViewModel.IsDuplicatesViewVisible, Converter={x:Static BoolConverters.Not}}"
                                   AutoGenerateColumns="False"
                                   IsReadOnly="True"
                                   CanUserResizeColumns="True">
@@ -345,7 +345,7 @@
                                 <DataGridTemplateColumn Header="#" Width="Auto" MinWidth="40"
                                                         SortMemberPath="DisplayIndex">
                                     <DataGridTemplateColumn.CellTemplate>
-                                        <DataTemplate x:DataType="vm:TrackItemViewModel">
+                                        <DataTemplate x:DataType="models:TrackModel">
                                             <TextBlock Text="{Binding DisplayIndex}"
                                                        Foreground="#B3B3B3"
                                                        VerticalAlignment="Center"
@@ -358,7 +358,7 @@
                                 <!-- Album art Column -->
                                 <DataGridTemplateColumn Header="" Width="Auto" MinWidth="50">
                                     <DataGridTemplateColumn.CellTemplate>
-                                        <DataTemplate x:DataType="vm:TrackItemViewModel">
+                                        <DataTemplate x:DataType="models:TrackModel">
                                             <Border Width="40" Height="40" Background="#333333" CornerRadius="4"
                                                     Margin="5,0">
                                                 <Panel>
@@ -368,9 +368,9 @@
                                                                Foreground="White"
                                                                FontWeight="Bold" />
                                                     <Image
-                                                        asyncImage:ImageLoader.Source="{Binding Album.Images[0].Url}"
+                                                        asyncImage:ImageLoader.Source="{Binding AlbumImageUrl}"
                                                         Stretch="UniformToFill"
-                                                        IsVisible="{Binding Album.Images, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                                        IsVisible="{Binding AlbumImageUrl, Converter={x:Static ObjectConverters.IsNotNull}}" />
                                                 </Panel>
                                             </Border>
                                         </DataTemplate>
@@ -380,13 +380,13 @@
                                 <!-- Track Name Column -->
                                 <DataGridTemplateColumn Header="Title" Width="*" MinWidth="120" SortMemberPath="Name">
                                     <DataGridTemplateColumn.CellTemplate>
-                                        <DataTemplate x:DataType="vm:TrackItemViewModel">
+                                        <DataTemplate x:DataType="models:TrackModel">
                                             <StackPanel VerticalAlignment="Center" Margin="0,5">
                                                 <StackPanel Orientation="Horizontal" Spacing="5">
                                                     <TextBlock Text="{Binding Name}" Foreground="White"
                                                                FontSize="14" />
                                                     <Border Background="#333333" CornerRadius="2" Padding="3,3"
-                                                            IsVisible="{Binding Explicit}">
+                                                            IsVisible="{Binding IsExplicit}">
                                                         <TextBlock Text="Explicit" FontSize="10" Foreground="#B3B3B3" />
                                                     </Border>
                                                     <Border Background="#333333" CornerRadius="2" Padding="3,3"
@@ -422,7 +422,7 @@
                                 <DataGridTemplateColumn Header="Duration" Width="Auto" MinWidth="80"
                                                         SortMemberPath="Duration">
                                     <DataGridTemplateColumn.CellTemplate>
-                                        <DataTemplate x:DataType="vm:TrackItemViewModel">
+                                        <DataTemplate x:DataType="models:TrackModel">
                                             <TextBlock Text="{Binding Duration}"
                                                        Foreground="#B3B3B3"
                                                        HorizontalAlignment="Center"
@@ -435,7 +435,7 @@
                                 <!-- Delete Button Column -->
                                 <DataGridTemplateColumn Header="" Width="Auto" MinWidth="50">
                                     <DataGridTemplateColumn.CellTemplate>
-                                        <DataTemplate x:DataType="vm:TrackItemViewModel">
+                                        <DataTemplate x:DataType="models:TrackModel">
                                             <ContentControl Content="{Binding}"
                                                             ContentTemplate="{StaticResource DeleteButtonTemplate}" />
                                         </DataTemplate>
