@@ -68,61 +68,81 @@ public class DuplicatesViewModel : ViewModelBase, IDisposable
         set => this.RaiseAndSetIfChanged(ref _currentPlaylist, value);
     }
 
-    public HierarchicalTreeDataGridSource<ITreeNode> Source
+    public HierarchicalTreeDataGridSource<ITreeNode> Source => _source ??= CreateSource();
+
+    private HierarchicalTreeDataGridSource<ITreeNode> CreateSource()
     {
-        get
-        {
-            if (_source != null) return _source;
-            _source = new HierarchicalTreeDataGridSource<ITreeNode>(
-                [.. FilteredDuplicateGroups]
-            );
+        var source = new HierarchicalTreeDataGridSource<ITreeNode>(
+            [.. FilteredDuplicateGroups]
+        );
 
-            // Album Image Column
-            _source.Columns.Add(new TemplateColumn<ITreeNode>(
-                "Album",
-                new AlbumImageTemplate(),
-                width: new GridLength(60, GridUnitType.Pixel)
-            ));
+        // Album Image Column
+        source.Columns.Add(new TemplateColumn<ITreeNode>(
+            "Album",
+            new AlbumImageTemplate(),
+            width: new GridLength(60, GridUnitType.Pixel)
+        ));
 
-            _source.Columns.Add(new HierarchicalExpanderColumn<ITreeNode>(
-                new TextColumn<ITreeNode, string>(
-                    "Track Name",
-                    item => GetDisplayName(item),
-                    new GridLength(1, GridUnitType.Star),
-                    new TextColumnOptions<ITreeNode>
-                    {
-                        TextTrimming = TextTrimming.CharacterEllipsis
-                    }
-                ),
-                GetChildren
-            ));
-
-            _source.Columns.Add(new TextColumn<ITreeNode, string>(
-                "Artists",
-                item => GetDisplayArtist(item),
+        source.Columns.Add(new HierarchicalExpanderColumn<ITreeNode>(
+            new TextColumn<ITreeNode, string>(
+                "Track Name",
+                item => GetDisplayName(item),
                 new GridLength(1, GridUnitType.Star),
                 new TextColumnOptions<ITreeNode>
                 {
                     TextTrimming = TextTrimming.CharacterEllipsis
                 }
-            ));
+            ),
+            GetChildren
+        ));
 
-            _source.Columns.Add(new TextColumn<ITreeNode, string>(
-                "Duration/Count",
-                item => GetDurationOrCount(item),
-                new GridLength(100, GridUnitType.Pixel)
-            ));
+        source.Columns.Add(new TextColumn<ITreeNode, string>(
+            "Artists",
+            item => GetDisplayArtist(item),
+            new GridLength(1, GridUnitType.Star),
+            new TextColumnOptions<ITreeNode>
+            {
+                TextTrimming = TextTrimming.CharacterEllipsis
+            }
+        ));
 
-            _source.Columns.Add(new TemplateColumn<ITreeNode>(
-                "Delete",
-                new DeleteButtonTemplate(this),
-                width: new GridLength(60, GridUnitType.Pixel)
-            ));
-            return _source;
-        }
+        source.Columns.Add(new TextColumn<ITreeNode, string>(
+            "Duration/Count",
+            item => GetDurationOrCount(item),
+            new GridLength(200, GridUnitType.Pixel)
+        ));
+        
+        source.Columns.Add(new TemplateColumn<ITreeNode>(
+            "Tags",
+            new TrackTagsTemplate(),
+            width: new GridLength(150, GridUnitType.Pixel)
+        ));
+        
+        source.Columns.Add(new TextColumn<ITreeNode, string>(
+            "Playlist Position",
+            item => GetPosition(item),
+            new GridLength(150, GridUnitType.Pixel)
+        ));
+
+        source.Columns.Add(new TemplateColumn<ITreeNode>(
+            "Delete",
+            new DeleteButtonTemplate(this),
+            width: new GridLength(130, GridUnitType.Pixel)
+        ));
+        
+        return source;
+    }
+    
+    private static string GetPosition(ITreeNode item)
+    {
+        return item switch
+        {
+            TrackModel track => track.PlaylistPosition.ToString(),
+            _ => string.Empty
+        };
     }
 
-    private static IEnumerable<ITreeNode>? GetChildren(ITreeNode item)
+    private static List<TrackModel>? GetChildren(ITreeNode item)
     {
         if (item is DuplicateGroup group)
         {
@@ -133,70 +153,168 @@ public class DuplicatesViewModel : ViewModelBase, IDisposable
 
     private static string GetDisplayName(ITreeNode item)
     {
-        if (item is DuplicateGroup group)
-            return group.DisplayName;
-        if (item is TrackModel track)
-            return track.Name;
-        return string.Empty;
+        return item switch
+        {
+            DuplicateGroup group => group.DisplayName,
+            TrackModel track => track.Name,
+            _ => string.Empty
+        };
     }
 
     private static string GetDisplayArtist(ITreeNode item)
     {
-        if (item is DuplicateGroup group)
-            return group.DisplayArtist;
-        if (item is TrackModel track)
-            return track.ArtistNames;
-        return string.Empty;
+        return item switch
+        {
+            DuplicateGroup group => group.DisplayArtist,
+            TrackModel track => track.ArtistNames,
+            _ => string.Empty
+        };
     }
 
     private static string GetDurationOrCount(ITreeNode item)
     {
-        if (item is DuplicateGroup group)
-            return $"{group.DuplicateCount} track(s)";
-        if (item is TrackModel track)
-            return track.Duration;
-        return string.Empty;
+        return item switch
+        {
+            DuplicateGroup group => $"{group.DuplicateCount} track(s)",
+            TrackModel track => track.Duration,
+            _ => string.Empty
+        };
     }
+    
+private class TrackTagsTemplate : IDataTemplate
+{
+    public Control Build(object? param)
+    {
+        var tagContainer = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+
+        switch (param)
+        {
+            case TrackModel track:
+                // Add explicit tag if applicable
+                if (track.IsExplicit)
+                {
+                    var explicitTag = new TextBlock
+                    {
+                        Text = "Explicit",
+                        Background = Brushes.Red,
+                        Foreground = Brushes.White,
+                        Padding = new Thickness(4),
+                        Margin = new Thickness(2),
+                        FontSize = 10,
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        VerticalAlignment = VerticalAlignment.Center
+                    };
+                    tagContainer.Children.Add(explicitTag);
+                }
+
+                // Add local file tag if applicable
+                if (track.IsLocal)
+                {
+                    var localTag = new TextBlock
+                    {
+                        Text = "Local",
+                        Background = Brushes.Green,
+                        Foreground = Brushes.White,
+                        Padding = new Thickness(4),
+                        Margin = new Thickness(2),
+                        FontSize = 10,
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        VerticalAlignment = VerticalAlignment.Center
+                    };
+                    tagContainer.Children.Add(localTag);
+                }
+                break;
+                
+            case DuplicateGroup group:
+                // For groups, we don't show tags
+                break;
+        }
+
+        return tagContainer;
+    }
+
+    public bool Match(object? data)
+    {
+        return data is ITreeNode;
+    }
+}
 
     private class DeleteButtonTemplate(DuplicatesViewModel viewModel) : IDataTemplate
     {
         public Control Build(object? param)
         {
-            if (param is TrackModel track)
+            switch (param)
             {
-                var button = new Button
+                case TrackModel track:
                 {
-                    Background = Brushes.Transparent,
-                    BorderThickness = new Thickness(0),
-                    Width = 32,
-                    Height = 32,
-                    Padding = new Thickness(0),
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center,
-                    Command = viewModel.DeleteDuplicateCommand,
-                    CommandParameter = track
-                };
+                    var button = new Button
+                    {
+                        Background = Brushes.Transparent,
+                        BorderThickness = new Thickness(0),
+                        Width = 32,
+                        Height = 32,
+                        Padding = new Thickness(0),
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Command = viewModel.DeleteDuplicateCommand,
+                        CommandParameter = track
+                    };
 
-                var viewbox = new Viewbox
+                    var viewbox = new Viewbox
+                    {
+                        Width = 16,
+                        Height = 16,
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Margin = new Thickness(-2, -2, 2, 2)
+                    };
+
+                    var path = new Path
+                    {
+                        Data = Geometry.Parse(
+                            "M6,19C6,20.1 6.9,21 8,21H16C17.1,21 18,20.1 18,19V7H6V19M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19V4Z"),
+                        Fill = new SolidColorBrush(Color.Parse("#ff5252"))
+                    };
+
+                    viewbox.Child = path;
+                    button.Content = viewbox;
+                    return button;
+                }
+                case DuplicateGroup group:
                 {
-                    Width = 16,
-                    Height = 16,
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center,
-                    Margin = new Thickness(-2, -2, 2, 2)
-                };
-
-                var path = new Path
-                {
-                    Data = Geometry.Parse("M6,19C6,20.1 6.9,21 8,21H16C17.1,21 18,20.1 18,19V7H6V19M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19V4Z"),
-                    Fill = new SolidColorBrush(Color.Parse("#ff5252"))
-                };
-
-                viewbox.Child = path;
-                button.Content = viewbox;
-                return button;
+                    var button = new Button
+                    {
+                        Background = Brushes.Transparent,
+                        BorderThickness = new Thickness(0),
+                        Width = 120,
+                        Height = 32,
+                        Padding = new Thickness(0),
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Command = viewModel.DeleteGroupDuplicatesCommand,
+                        CommandParameter = group
+                    };
+                    
+                    var buttonText = new TextBlock
+                    {
+                        Text = "Delete Duplicates",
+                        FontSize = 12,
+                        Foreground = new SolidColorBrush(Color.Parse("#ff5252")),
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        VerticalAlignment = VerticalAlignment.Center
+                    };
+                    
+                    button.Content = buttonText;
+                    return button;
+                }
+                default:
+                    return new Control(); // Return an empty control if the type doesn't match
             }
-            return new Border();
         }
 
         public bool Match(object? data)
@@ -209,29 +327,103 @@ public class DuplicatesViewModel : ViewModelBase, IDisposable
     {
         public Control Build(object? param)
         {
-            var image = new Image 
-            { 
-                Width = 40, 
-                Height = 40, 
-                Stretch = Stretch.Uniform 
-            };
-            
-            if (param is ITreeNode node && !string.IsNullOrEmpty(node.DisplayImage))
-            {
-                ImageLoader.SetSource(image, node.DisplayImage);
-            }
-            
-            return new Border
+            // Create a container for our image
+            var container = new Border
             {
                 Width = 50,
                 Height = 50,
                 Margin = new Thickness(5),
                 VerticalAlignment = VerticalAlignment.Center,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                Child = image
+                HorizontalAlignment = HorizontalAlignment.Center
             };
+            
+            Control content;
+            
+            switch (param)
+            {
+                case TrackModel track:
+                {
+                    if (!string.IsNullOrEmpty(track.AlbumImageUrl))
+                    {
+                        // For remote images, use AsyncImageLoader
+                        var image = new Image
+                        {
+                            Width = 40,
+                            Height = 40,
+                            Stretch = Stretch.UniformToFill
+                        };
+                        ImageLoader.SetSource(image, track.AlbumImageUrl);
+                        content = image;
+                    }
+                    else
+                    {
+                        // Use the SVG image resource defined in App.axaml
+                        var image = new Image
+                        {
+                            Width = 40,
+                            Height = 40,
+                            Stretch = Stretch.UniformToFill
+                        };
+                        
+                        // Access the resource using the StaticResource markup extension
+                        var localFileIcon = Application.Current!.Resources["LocalFileIcon"];
+                        if (localFileIcon is IImage svgImage)
+                        {
+                            image.Source = svgImage;
+                        }
+                        
+                        content = image;
+                    }
+                    break;
+                }
+                case DuplicateGroup group:
+                {
+                    if (!string.IsNullOrEmpty(group.DisplayImage))
+                    {
+                        // For remote images, use AsyncImageLoader
+                        var image = new Image
+                        {
+                            Width = 40,
+                            Height = 40,
+                            Stretch = Stretch.UniformToFill
+                        };
+                        ImageLoader.SetSource(image, group.DisplayImage);
+                        content = image;
+                    }
+                    else
+                    {
+                        // Use the SVG image resource defined in App.axaml
+                        var image = new Image
+                        {
+                            Width = 40,
+                            Height = 40,
+                            Stretch = Stretch.UniformToFill
+                        };
+                        
+                        // Access the resource using the StaticResource markup extension
+                        var localFileIcon = Application.Current!.Resources["LocalFileIcon"];
+                        if (localFileIcon is IImage svgImage)
+                        {
+                            image.Source = svgImage;
+                        }
+                        
+                        content = image;
+                    }
+                    break;
+                }
+                default:
+                    content = new Image
+                    {
+                        Width = 40,
+                        Height = 40
+                    };
+                    break;
+            }
+            
+            container.Child = content;
+            return container;
         }
-
+        
         public bool Match(object? data)
         {
             return data is ITreeNode;
@@ -253,6 +445,7 @@ public class DuplicatesViewModel : ViewModelBase, IDisposable
         FindDuplicatesCommand = ReactiveCommand.Create<ObservableCollection<TrackModel>>(FindDuplicates);
         RemoveAllDuplicatesCommand = ReactiveCommand.Create(RemoveAllDuplicates);
         DeleteDuplicateCommand = ReactiveCommand.Create<TrackModel>(DeleteDuplicate);
+        DeleteGroupDuplicatesCommand = ReactiveCommand.Create<DuplicateGroup>(DeleteGroupDuplicates);
         BackToTracksCommand = ReactiveCommand.Create(() =>
         {
             IsDuplicatesViewVisible = false;
@@ -264,6 +457,7 @@ public class DuplicatesViewModel : ViewModelBase, IDisposable
     public ICommand FindDuplicatesCommand { get; }
     public ICommand RemoveAllDuplicatesCommand { get; }
     private ICommand DeleteDuplicateCommand { get; }
+    private ICommand DeleteGroupDuplicatesCommand { get; }
     public ICommand BackToTracksCommand { get; }
     public ICommand ResetFiltersCommand { get; }
 
@@ -396,15 +590,26 @@ public class DuplicatesViewModel : ViewModelBase, IDisposable
 
             // Remove track from the group
             group.Tracks.Remove(track);
-
-            // Create a brand-new source to force a complete refresh
-            _source = null;
             
-            // Create a new collection to force change notification
-            DuplicateGroups = new ObservableCollection<DuplicateGroup>([.. DuplicateGroups]);
-
-            // Explicitly raise property changed for the Source property
+            // Update both collections to ensure UI refresh
+            var updatedGroups = new ObservableCollection<DuplicateGroup>([.. DuplicateGroups]);
+            DuplicateGroups = updatedGroups;
+            
+            // Update filtered collection as well
+            FilterDuplicates();
+            
+            // Recreate the source completely
+            _source = null;
             this.RaisePropertyChanged(nameof(Source));
+            
+            // Remove group if no tracks left
+            if (group.Tracks.Count <= 1)
+            {
+                DuplicateGroups.Remove(group);
+                FilterDuplicates(); // Apply filtering again
+                _source = null; // Force regeneration of source
+                this.RaisePropertyChanged(nameof(Source));
+            }
 
             Task.Run(async () =>
             {
@@ -431,16 +636,6 @@ public class DuplicatesViewModel : ViewModelBase, IDisposable
                         // Refresh the tracks without clearing the cache
                         mainViewModel?.TrackListViewModel.RefreshTracks(true);
 
-                        if (group.Tracks.Count <= 1)
-                        {
-                            DuplicateGroups.Remove(group);
-
-                            // Force refresh again if we remove a group
-                            _source = null;
-                            DuplicateGroups = new ObservableCollection<DuplicateGroup>([.. DuplicateGroups]);
-                            this.RaisePropertyChanged(nameof(Source));
-                        }
-
                         if (DuplicateGroups.Count != 0) return;
                         IsDuplicatesViewVisible = false;
                         BackToTracksView?.Invoke(this, EventArgs.Empty);
@@ -459,6 +654,117 @@ public class DuplicatesViewModel : ViewModelBase, IDisposable
         catch (Exception ex)
         {
             OnStatusMessageChanged($"Error processing duplicate: {ex.Message}");
+        }
+    }
+
+    private void DeleteGroupDuplicates(DuplicateGroup group)
+    {
+        if (CurrentPlaylist == null || group.Tracks.Count <= 1)
+            return;
+
+        CancelCurrentOperations();
+        var cancellationToken = _cancellationTokenSource?.Token ?? CancellationToken.None;
+
+        try
+        {
+            // Determine which track to keep based on the same rules as RemoveAllDuplicates
+            var indexToKeep = _duplicatesService.GetTrackToKeepIndex(group);
+            var tracksToDelete = group.Tracks.Where((_, i) => i != indexToKeep).ToList();
+            var trackToKeep = group.Tracks[indexToKeep];
+
+            // No need to proceed if there are no tracks to delete
+            if (tracksToDelete.Count == 0)
+            {
+                OnStatusMessageChanged("No tracks to delete after applying rules");
+                return;
+            }
+
+            // Create a copy of tracks to delete before modifying the group
+            var tracksToDeleteCopy = tracksToDelete.ToList();
+
+            // Update UI immediately by removing tracks from the group
+            foreach (var track in tracksToDelete)
+            {
+                group.Tracks.Remove(track);
+            }
+
+            // Create a brand-new source to force a complete refresh
+            _source = null;
+            
+            // Create a new collection to force change notification
+            DuplicateGroups = new ObservableCollection<DuplicateGroup>([.. DuplicateGroups]);
+
+            // Explicitly raise property changed for the Source property
+            this.RaisePropertyChanged(nameof(Source));
+
+            // If only one track remains (the one we're keeping), remove the group
+            if (group.Tracks.Count <= 1)
+            {
+                DuplicateGroups.Remove(group);
+                _source = null;
+                this.RaisePropertyChanged(nameof(Source));
+            }
+
+            Task.Run(async () =>
+            {
+                var successCount = 0;
+                
+                try
+                {
+                    foreach (var track in tracksToDeleteCopy)
+                    {
+                        try
+                        {
+                            if (cancellationToken.IsCancellationRequested)
+                                break;
+
+                            if (CurrentPlaylist.IsLikedSongs)
+                            {
+                                await _spotifyService.RemoveTrackFromLikedSongs(track.Id, cancellationToken);
+                            }
+                            else
+                            {
+                                await _spotifyService.RemoveTrackFromPlaylist(CurrentPlaylist.Id, track.Uri, cancellationToken);
+                            }
+                            
+                            successCount++;
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"Error removing track {track.Name}: {ex.Message}");
+                        }
+                    }
+
+                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        OnStatusMessageChanged($"Removed {successCount} of {tracksToDeleteCopy.Count} duplicates from group \"{group.DisplayName}\", kept \"{trackToKeep.Name}\"");
+
+                        // Get reference to the TrackListViewModel to refresh the tracks
+                        var mainViewModel = Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop
+                            ? desktop.MainWindow?.DataContext as MainWindowViewModel
+                            : null;
+
+                        // Refresh the tracks without clearing the cache
+                        mainViewModel?.TrackListViewModel.RefreshTracks(true);
+
+                        if (DuplicateGroups.Count != 0) return;
+                        IsDuplicatesViewVisible = false;
+                        BackToTracksView?.Invoke(this, EventArgs.Empty);
+                        DuplicatesRemoved?.Invoke(this, EventArgs.Empty);
+                    });
+                }
+                catch (Exception ex)
+                {
+                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        OnStatusMessageChanged($"Error removing tracks from group: {ex.Message}");
+                    });
+                }
+            }, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            OnStatusMessageChanged($"Error processing group duplicates: {ex.Message}");
         }
     }
 
@@ -509,18 +815,25 @@ public class DuplicatesViewModel : ViewModelBase, IDisposable
             var lowerCaseQuery = SearchQuery.ToLowerInvariant();
             FilteredDuplicateGroups = new ObservableCollection<DuplicateGroup>(
                 DuplicateGroups.Where(group =>
-                    group.DisplayName.ToLowerInvariant().Contains(lowerCaseQuery) ||
-                    group.DisplayArtist.ToLowerInvariant().Contains(lowerCaseQuery) ||
+                    group.DisplayName.Contains(lowerCaseQuery, StringComparison.InvariantCultureIgnoreCase) ||
+                    group.DisplayArtist.Contains(lowerCaseQuery, StringComparison.InvariantCultureIgnoreCase) ||
                     group.Tracks.Any(track =>
-                        track.Name.ToLowerInvariant().Contains(lowerCaseQuery) ||
-                        track.ArtistNames.ToLowerInvariant().Contains(lowerCaseQuery)
+                        track.Name.Contains(lowerCaseQuery, StringComparison.InvariantCultureIgnoreCase) ||
+                        track.ArtistNames.Contains(lowerCaseQuery, StringComparison.InvariantCultureIgnoreCase)
                     )
                 )
             );
         }
 
-        // Refresh the source to reflect the filtered groups
-        _source = null;
-        this.RaisePropertyChanged(nameof(Source));
+        // Update the source items without recreating the entire source
+        if (_source != null)
+        {
+            _source.Items = FilteredDuplicateGroups;
+        }
+        else
+        {
+            // Only raise property changed if we need to create a new source
+            this.RaisePropertyChanged(nameof(Source));
+        }
     }
 }

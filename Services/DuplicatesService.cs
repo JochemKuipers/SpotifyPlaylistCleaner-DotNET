@@ -71,18 +71,40 @@ public class DuplicatesService : IDuplicatesService
         // Default to first track
         var indexToKeep = 0;
 
-        // Check for explicit tracks
-        var hasExplicitTracks = group.Tracks.Any(t => t.IsExplicit);
-        var allTracksExplicit = group.Tracks.All(t => t.IsExplicit);
+        // First, check if there's a mix of local and Spotify tracks
+        var hasLocalTracks = group.Tracks.Any(t => t.IsLocal);
+        var hasSpotifyTracks = group.Tracks.Any(t => !t.IsLocal);
 
-        // If there's a mix of explicit and non-explicit tracks, prioritize keeping an explicit one
-        if (!hasExplicitTracks || allTracksExplicit) return indexToKeep;
-        // Find the first explicit track
-        for (var i = 0; i < group.Tracks.Count; i++)
+        // If there's a mix, prioritize Spotify tracks over local files
+        if (hasLocalTracks && hasSpotifyTracks)
         {
-            if (!group.Tracks[i].IsExplicit) continue;
-            indexToKeep = i;
-            break;
+            // Find the first Spotify track (non-local)
+            for (var i = 0; i < group.Tracks.Count; i++)
+            {
+                if (group.Tracks[i].IsLocal) continue;
+                indexToKeep = i;
+                break;
+            }
+        }
+
+        // Then check for explicit tracks, but only among Spotify tracks
+        // (local tracks don't have reliable IsExplicit information)
+        var spotifyTracks = group.Tracks.Where(t => !t.IsLocal).ToList();
+
+        if (spotifyTracks.Count <= 0) return indexToKeep;
+        {
+            var hasExplicitTracks = spotifyTracks.Any(t => t.IsExplicit);
+            var allTracksExplicit = spotifyTracks.All(t => t.IsExplicit);
+
+            // If there's a mix of explicit and non-explicit tracks, prioritize keeping an explicit one
+            if (!hasExplicitTracks || allTracksExplicit) return indexToKeep;
+            // Find the first explicit track among the Spotify tracks
+            for (var i = 0; i < group.Tracks.Count; i++)
+            {
+                if (group.Tracks[i].IsLocal || !group.Tracks[i].IsExplicit) continue;
+                indexToKeep = i;
+                break;
+            }
         }
 
         return indexToKeep;

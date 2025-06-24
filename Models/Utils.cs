@@ -9,6 +9,24 @@ public static partial class Utils
     {
         try
         {
+            // If song name contains version indicators like (V1), (V2), etc., 
+            // preserve them in the cleaned name to avoid treating them as duplicates
+            if (songName != null && VersionIndicatorRegex().IsMatch(songName))
+            {
+                // Extract the version indicator
+                var versionMatch = VersionIndicatorRegex().Match(songName);
+                var versionIndicator = versionMatch.Value;
+                
+                // First clean the name using the normal process
+                var cleanedName = ContainsFeatOrWithInBracketsOrParenthesesRegex().IsMatch(songName)
+                    ? FeatOrWithSuffixRegex().Split(songName)[0].Trim()
+                    : BracketsOrParenthesesContentRegex().Replace(songName, "").Trim();
+                
+                // Then append the version indicator to the cleaned name
+                return $"{cleanedName} {versionIndicator}".Trim();
+            }
+            
+            // Original cleaning logic for songs without version indicators
             songName = ContainsFeatOrWithInBracketsOrParenthesesRegex().IsMatch(songName!)
                 ? FeatOrWithSuffixRegex().Split(songName!)[0].Trim()
                 : BracketsOrParenthesesContentRegex().Replace(songName!, "").Trim();
@@ -43,4 +61,7 @@ public static partial class Utils
 
     [GeneratedRegex(@"[\[(].*", RegexOptions.None)]
     private static partial Regex BracketsOrParenthesesContentRegex();
+    
+    [GeneratedRegex(@"[\[(]\s*[Vv][0-9]+\s*[\])]", RegexOptions.None)]
+    private static partial Regex VersionIndicatorRegex();
 }

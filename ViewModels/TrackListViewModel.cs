@@ -145,7 +145,7 @@ public class TrackListViewModel : ViewModelBase, IDisposable
                     Tracks = new ObservableCollection<TrackModel>(trackModels);
                     FilterTracks();
 
-                    string trackText = playlist.IsLikedSongs ? "liked songs" : "tracks";
+                    var trackText = playlist.IsLikedSongs ? "liked songs" : "tracks";
                     OnStatusMessageChanged($"Loaded {tracks.Count} {trackText}");
 
                     LoadingProgress = 100;
@@ -166,7 +166,7 @@ public class TrackListViewModel : ViewModelBase, IDisposable
             }
             catch (Exception ex)
             {
-                string trackText = playlist.IsLikedSongs ? "liked songs" : "tracks";
+                var trackText = playlist.IsLikedSongs ? "liked songs" : "tracks";
                 OnStatusMessageChanged($"Failed to load {trackText}: {ex.Message}");
             }
             finally
@@ -195,7 +195,7 @@ public class TrackListViewModel : ViewModelBase, IDisposable
             Tracks = new ObservableCollection<TrackModel>(trackModels);
             FilterTracks();
 
-            string trackText = CurrentPlaylist!.IsLikedSongs ? "liked songs" : "tracks";
+            var trackText = CurrentPlaylist!.IsLikedSongs ? "liked songs" : "tracks";
             OnStatusMessageChanged($"Loaded {cachedTracks.Count} {trackText} from cache");
 
             IsLoadingTracks = false;
@@ -277,26 +277,24 @@ public class TrackListViewModel : ViewModelBase, IDisposable
                 }
 
                 // Update cache
-                if (_cacheService.IsCacheEnabled)
+                if (!_cacheService.IsCacheEnabled) return;
+                var fullTracks = Tracks.Select(t => new FullTrack
                 {
-                    var fullTracks = Tracks.Select(t => new FullTrack
-                    {
-                        Id = t.Id,
-                        Uri = t.Uri,
-                        Name = t.Name,
-                        Artists = [.. t.Artists.Select(a => new SimpleArtist { Name = a })],
-                        Album = new SimpleAlbum { Name = t.Album },
-                        DurationMs = t.DurationMs,
-                        IsPlayable = t.IsPlayable,
-                        Explicit = t.IsExplicit,
-                        IsLocal = t.IsLocal
-                    }).ToList();
+                    Id = t.Id,
+                    Uri = t.Uri,
+                    Name = t.Name,
+                    Artists = [.. t.Artists.Select(a => new SimpleArtist { Name = a })],
+                    Album = new SimpleAlbum { Name = t.Album },
+                    DurationMs = t.DurationMs,
+                    IsPlayable = t.IsPlayable,
+                    Explicit = t.IsExplicit,
+                    IsLocal = t.IsLocal
+                }).ToList();
 
-                    if (CurrentPlaylist.IsLikedSongs)
-                        await _cacheService.SaveLikedTracksToCacheAsync(fullTracks, cancellationToken);
-                    else
-                        await _cacheService.SaveTracksToCacheAsync(CurrentPlaylist.Id, fullTracks, cancellationToken);
-                }
+                if (CurrentPlaylist.IsLikedSongs)
+                    await _cacheService.SaveLikedTracksToCacheAsync(fullTracks, cancellationToken);
+                else
+                    await _cacheService.SaveTracksToCacheAsync(CurrentPlaylist.Id, fullTracks, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -317,7 +315,7 @@ public class TrackListViewModel : ViewModelBase, IDisposable
 
     private void UpdateTrackIndices()
     {
-        for (int i = 0; i < Tracks.Count; i++)
+        for (var i = 0; i < Tracks.Count; i++)
         {
             Tracks[i].DisplayIndex = i + 1;
         }

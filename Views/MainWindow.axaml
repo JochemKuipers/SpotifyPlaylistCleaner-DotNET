@@ -344,6 +344,14 @@
                                     <Style Selector="TreeDataGrid > ListBoxItem:selected">
                                         <Setter Property="Background" Value="#333333" />
                                     </Style>
+                                    <!-- Style for child nodes (tracks within duplicate groups) -->
+                                    <Style Selector="TreeDataGridRow:not(:first-child)">
+                                        <Setter Property="Background" Value="#222222" />
+                                        <Setter Property="BorderThickness" Value="0,1,0,1" />
+                                        <Setter Property="BorderBrush" Value="#333333" />
+                                        <Setter Property="Margin" Value="0,2,0,2" />
+                                        <Setter Property="CornerRadius" Value="2" />
+                                    </Style>
                                 </TreeDataGrid.Styles>
                             </TreeDataGrid>
 

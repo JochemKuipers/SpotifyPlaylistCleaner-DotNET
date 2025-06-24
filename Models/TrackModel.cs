@@ -20,13 +20,14 @@ public class TrackModel : ITreeNode
     public bool IsExplicit { get; set; }
     public bool IsLocal { get; set; }
     public int DisplayIndex { get; set; }
+    public int PlaylistPosition { get; set; } // Track's position in the playlist for removal operations
 
     // ITreeNode implementation
     string ITreeNode.DisplayName => Name;
     string ITreeNode.DisplayArtist => ArtistNames;
     string ITreeNode.DisplayImage => AlbumImageUrl;
 
-    public static TrackModel FromFullTrack(FullTrack track, int index)
+    public static TrackModel FromFullTrack(FullTrack track, int index, int position = -1)
     {
         return new TrackModel
         {
@@ -40,7 +41,8 @@ public class TrackModel : ITreeNode
             IsPlayable = track.IsPlayable,
             IsExplicit = track.Explicit,
             IsLocal = track.IsLocal,
-            DisplayIndex = index
+            DisplayIndex = index,
+            PlaylistPosition = position >= 0 ? position : index
         };
     }
 }

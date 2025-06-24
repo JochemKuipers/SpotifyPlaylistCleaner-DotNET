@@ -6,6 +6,7 @@
 
     <Application.Resources>
         <svg:SvgImage x:Key="AppIcon" Source="/Assets/Icons/icon.svg" />
+        <svg:SvgImage x:Key="LocalFileIcon" Source="/Assets/Icons/local-file.svg" />
     </Application.Resources>
 
     <Application.Styles>
