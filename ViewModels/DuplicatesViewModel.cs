@@ -28,6 +28,8 @@ public class DuplicatesViewModel : ViewModelBase, IDisposable
     private CancellationTokenSource? _cancellationTokenSource;
 
     private ObservableCollection<DuplicateGroup> _duplicateGroups = [];
+    private ObservableCollection<DuplicateGroup> _filteredDuplicateGroups = [];
+    private string _searchQuery = string.Empty;
     private bool _isDuplicatesViewVisible;
     private PlaylistModel? _currentPlaylist;
     private HierarchicalTreeDataGridSource<ITreeNode>? _source;
@@ -36,6 +38,22 @@ public class DuplicatesViewModel : ViewModelBase, IDisposable
     {
         get => _duplicateGroups;
         private set => this.RaiseAndSetIfChanged(ref _duplicateGroups, value);
+    }
+
+    private ObservableCollection<DuplicateGroup> FilteredDuplicateGroups
+    {
+        get => _filteredDuplicateGroups;
+        set => this.RaiseAndSetIfChanged(ref _filteredDuplicateGroups, value);
+    }
+
+    public string SearchQuery
+    {
+        get => _searchQuery;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _searchQuery, value);
+            FilterDuplicates();
+        }
     }
 
     public bool IsDuplicatesViewVisible
@@ -56,7 +74,7 @@ public class DuplicatesViewModel : ViewModelBase, IDisposable
         {
             if (_source != null) return _source;
             _source = new HierarchicalTreeDataGridSource<ITreeNode>(
-                [.. DuplicateGroups]
+                [.. FilteredDuplicateGroups]
             );
 
             // Album Image Column
@@ -240,12 +258,14 @@ public class DuplicatesViewModel : ViewModelBase, IDisposable
             IsDuplicatesViewVisible = false;
             BackToTracksView?.Invoke(this, EventArgs.Empty);
         });
+        ResetFiltersCommand = ReactiveCommand.Create(() => SearchQuery = string.Empty);
     }
 
     public ICommand FindDuplicatesCommand { get; }
     public ICommand RemoveAllDuplicatesCommand { get; }
     private ICommand DeleteDuplicateCommand { get; }
     public ICommand BackToTracksCommand { get; }
+    public ICommand ResetFiltersCommand { get; }
 
     private void FindDuplicates(ObservableCollection<TrackModel> tracks)
     {
@@ -273,6 +293,8 @@ public class DuplicatesViewModel : ViewModelBase, IDisposable
             var duplicates = _duplicatesService.FindDuplicates(tracks);
 
             DuplicateGroups = new ObservableCollection<DuplicateGroup>(duplicates);
+            FilteredDuplicateGroups = new ObservableCollection<DuplicateGroup>(duplicates);
+            SearchQuery = string.Empty;
 
             _source = null;
             this.RaisePropertyChanged(nameof(Source));
@@ -380,7 +402,7 @@ public class DuplicatesViewModel : ViewModelBase, IDisposable
             
             // Create a new collection to force change notification
             DuplicateGroups = new ObservableCollection<DuplicateGroup>([.. DuplicateGroups]);
-            
+
             // Explicitly raise property changed for the Source property
             this.RaisePropertyChanged(nameof(Source));
 
@@ -406,16 +428,13 @@ public class DuplicatesViewModel : ViewModelBase, IDisposable
                             ? desktop.MainWindow?.DataContext as MainWindowViewModel
                             : null;
 
-                        if (mainViewModel?.TrackListViewModel != null)
-                        {
-                            // Refresh the tracks without clearing the cache
-                            mainViewModel.TrackListViewModel.RefreshTracks(true);
-                        }
+                        // Refresh the tracks without clearing the cache
+                        mainViewModel?.TrackListViewModel.RefreshTracks(true);
 
                         if (group.Tracks.Count <= 1)
                         {
                             DuplicateGroups.Remove(group);
-                            
+
                             // Force refresh again if we remove a group
                             _source = null;
                             DuplicateGroups = new ObservableCollection<DuplicateGroup>([.. DuplicateGroups]);
@@ -454,7 +473,7 @@ public class DuplicatesViewModel : ViewModelBase, IDisposable
 
             var indexToKeep = _duplicatesService.GetTrackToKeepIndex(group);
 
-            tracksToDelete.AddRange(group.Tracks.Where((t, i) => i != indexToKeep));
+            tracksToDelete.AddRange(group.Tracks.Where((_, i) => i != indexToKeep));
         }
 
         return tracksToDelete;
@@ -477,5 +496,31 @@ public class DuplicatesViewModel : ViewModelBase, IDisposable
         _cancellationTokenSource?.Cancel();
         _cancellationTokenSource?.Dispose();
         GC.SuppressFinalize(this);
+    }
+
+    private void FilterDuplicates()
+    {
+        if (string.IsNullOrWhiteSpace(SearchQuery))
+        {
+            FilteredDuplicateGroups = new ObservableCollection<DuplicateGroup>(DuplicateGroups);
+        }
+        else
+        {
+            var lowerCaseQuery = SearchQuery.ToLowerInvariant();
+            FilteredDuplicateGroups = new ObservableCollection<DuplicateGroup>(
+                DuplicateGroups.Where(group =>
+                    group.DisplayName.ToLowerInvariant().Contains(lowerCaseQuery) ||
+                    group.DisplayArtist.ToLowerInvariant().Contains(lowerCaseQuery) ||
+                    group.Tracks.Any(track =>
+                        track.Name.ToLowerInvariant().Contains(lowerCaseQuery) ||
+                        track.ArtistNames.ToLowerInvariant().Contains(lowerCaseQuery)
+                    )
+                )
+            );
+        }
+
+        // Refresh the source to reflect the filtered groups
+        _source = null;
+        this.RaisePropertyChanged(nameof(Source));
     }
 }

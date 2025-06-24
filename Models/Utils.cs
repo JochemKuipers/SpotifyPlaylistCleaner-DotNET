@@ -9,9 +9,9 @@ public static partial class Utils
     {
         try
         {
-            songName = MyRegex().IsMatch(songName!)
-                ? MyRegex2().Split(songName!)[0].Trim()
-                : MyRegex1().Replace(songName!, "").Trim();
+            songName = ContainsFeatOrWithInBracketsOrParenthesesRegex().IsMatch(songName!)
+                ? FeatOrWithSuffixRegex().Split(songName!)[0].Trim()
+                : BracketsOrParenthesesContentRegex().Replace(songName!, "").Trim();
         }
         catch (Exception e)
         {
@@ -36,11 +36,11 @@ public static partial class Utils
     }
 
     [GeneratedRegex(@"[\[(].*?(feat\.?|with\.?)", RegexOptions.IgnoreCase, "en-US")]
-    private static partial Regex MyRegex();
+    private static partial Regex ContainsFeatOrWithInBracketsOrParenthesesRegex();
 
     [GeneratedRegex(@"\s*(feat\.|with\.)\s.*$", RegexOptions.IgnoreCase, "en-US")]
-    private static partial Regex MyRegex1();
+    private static partial Regex FeatOrWithSuffixRegex();
 
     [GeneratedRegex(@"[\[(].*", RegexOptions.None)]
-    private static partial Regex MyRegex2();
+    private static partial Regex BracketsOrParenthesesContentRegex();
 }
