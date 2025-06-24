@@ -43,11 +43,9 @@ namespace SpotifyPlaylistCleaner_DotNET.Helpers
         {
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                if (!Equals(property, value))
-                {
-                    setter(value);
-                    viewModel.RaisePropertyChanged(propertyName);
-                }
+                if (Equals(property, value)) return;
+                setter(value);
+                viewModel.RaisePropertyChanged(propertyName);
             });
         }
 

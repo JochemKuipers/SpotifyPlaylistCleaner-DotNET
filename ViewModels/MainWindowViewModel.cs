@@ -2,7 +2,6 @@
 using System.Threading.Tasks;
 using System.Windows.Input;
 using ReactiveUI;
-using SpotifyPlaylistCleaner_DotNET.Models;
 using SpotifyPlaylistCleaner_DotNET.Services;
 
 namespace SpotifyPlaylistCleaner_DotNET.ViewModels;
@@ -10,9 +9,6 @@ namespace SpotifyPlaylistCleaner_DotNET.ViewModels;
 public class MainWindowViewModel : ViewModelBase, IDisposable
 {
     private readonly IAuthenticationService _authService;
-    private readonly ISpotifyService _spotifyService;
-    private readonly ICacheService _cacheService;
-    private readonly IDuplicatesService _duplicatesService;
 
     private bool _isAuthenticated;
     private bool _isAuthenticating;
@@ -47,14 +43,11 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         IDuplicatesService duplicatesService)
     {
         _authService = authService;
-        _spotifyService = spotifyService;
-        _cacheService = cacheService;
-        _duplicatesService = duplicatesService;
 
         // Create child view models
-        PlaylistViewModel = new PlaylistViewModel(_spotifyService, _cacheService);
-        TrackListViewModel = new TrackListViewModel(_spotifyService, _cacheService);
-        DuplicatesViewModel = new DuplicatesViewModel(_duplicatesService, _spotifyService, _cacheService);
+        PlaylistViewModel = new PlaylistViewModel(spotifyService);
+        TrackListViewModel = new TrackListViewModel(spotifyService, cacheService);
+        DuplicatesViewModel = new DuplicatesViewModel(duplicatesService, spotifyService);
 
         // Set up event handlers
         PlaylistViewModel.PlaylistSelected += (sender, playlist) => TrackListViewModel.CurrentPlaylist = playlist;

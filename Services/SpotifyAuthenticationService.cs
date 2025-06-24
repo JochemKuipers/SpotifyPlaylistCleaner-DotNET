@@ -49,6 +49,6 @@ public class SpotifyAuthenticationService : IAuthenticationService
             throw new InvalidOperationException("Not authenticated");
 
         var user = await _spotifyClient.UserProfile.Current();
-        return user.DisplayName ?? user.Id;
+        return user.DisplayName;
     }
 }

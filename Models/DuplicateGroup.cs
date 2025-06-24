@@ -5,9 +5,9 @@ namespace SpotifyPlaylistCleaner_DotNET.Models;
 
 public class DuplicateGroup : ITreeNode
 {
-    public List<TrackModel> Tracks { get; set; } = [];
+    public List<TrackModel> Tracks { get; init; } = [];
     public int DuplicateCount => Tracks.Count;
-    public string DisplayName { get; set; } = string.Empty;
-    public string DisplayArtist { get; set; } = string.Empty;
-    public string DisplayImage { get; set; } = string.Empty;
+    public string DisplayName { get; init; } = string.Empty;
+    public string DisplayArtist { get; init; } = string.Empty;
+    public string DisplayImage { get; init; } = string.Empty;
 }

@@ -17,7 +17,7 @@ namespace SpotifyPlaylistCleaner_DotNET.Models;
 
 public static class SpotifyAuth
 {
-    public const string CredentialsPath = "credentials.json";
+    private const string CredentialsPath = "credentials.json";
     private const string ClientIdStoragePath = "spotify_client_id.dat";
     private static readonly EmbedIOAuthServer Server = new(new Uri("http://127.0.0.1:3000/callback"), 3000);
 
@@ -29,7 +29,7 @@ public static class SpotifyAuth
 
         try
         {
-            byte[] plainBytes = Encoding.UTF8.GetBytes(plainText);
+            var plainBytes = Encoding.UTF8.GetBytes(plainText);
 
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
@@ -176,25 +176,25 @@ public static class SpotifyAuth
 
             var layout = new StackPanel
             {
-                Margin = new Avalonia.Thickness(20)
+                Margin = new Thickness(20)
             };
 
             layout.Children.Add(new TextBlock
             {
                 Text = "Please enter your Spotify Client ID",
-                Margin = new Avalonia.Thickness(0, 0, 0, 10)
+                Margin = new Thickness(0, 0, 0, 10)
             });
 
             layout.Children.Add(new TextBlock
             {
                 Text = "You can get one from https://developer.spotify.com/dashboard",
-                Margin = new Avalonia.Thickness(0, 0, 0, 10)
+                Margin = new Thickness(0, 0, 0, 10)
             });
 
             var clientIdTextBox = new TextBox
             {
                 Watermark = "Client ID",
-                Margin = new Avalonia.Thickness(0, 0, 0, 20)
+                Margin = new Thickness(0, 0, 0, 20)
             };
             layout.Children.Add(clientIdTextBox);
 

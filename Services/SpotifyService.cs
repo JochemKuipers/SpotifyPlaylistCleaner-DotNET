@@ -4,7 +4,6 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using SpotifyAPI.Web;
-using SpotifyPlaylistCleaner_DotNET.Models;
 
 namespace SpotifyPlaylistCleaner_DotNET.Services;
 
@@ -13,20 +12,21 @@ public class SpotifyService(SpotifyClient? spotifyClient, IAuthenticationService
     private const int MaxConcurrentRequests = 25;
     private const int ProgressThreshold = 5;
     private readonly SemaphoreSlim _initializationLock = new(1, 1);
+    private SpotifyClient? _spotifyClient = spotifyClient;
 
     private async Task<SpotifyClient> GetOrInitializeClient()
     {
-        if (spotifyClient != null)
-            return spotifyClient;
+        if (_spotifyClient != null)
+            return _spotifyClient;
 
         await _initializationLock.WaitAsync();
         try
         {
-            if (spotifyClient != null)
-                return spotifyClient;
+            if (_spotifyClient != null)
+                return _spotifyClient;
 
-            spotifyClient = await authService.Authenticate();
-            return spotifyClient;
+            _spotifyClient = await authService.Authenticate();
+            return _spotifyClient;
         }
         finally
         {
@@ -174,7 +174,7 @@ public class SpotifyService(SpotifyClient? spotifyClient, IAuthenticationService
             return allTracks;
 
         foreach (var item in initialResponse.Items!)
-            if (item.Track is FullTrack track)
+            if (item.Track is { } track)
                 allTracks.Add(track);
 
         var loadedCount = initialResponse.Items!.Count;
@@ -210,7 +210,7 @@ public class SpotifyService(SpotifyClient? spotifyClient, IAuthenticationService
 
                     var batchTracks = new List<FullTrack>();
                     foreach (var item in response.Items!)
-                        if (item.Track is FullTrack track)
+                        if (item.Track is { } track)
                             batchTracks.Add(track);
 
                     lock (progressLock)

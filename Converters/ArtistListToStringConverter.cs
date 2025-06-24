@@ -13,22 +13,15 @@ namespace SpotifyPlaylistCleaner_DotNET.Converters
 
         public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
         {
-            if (value is null)
-                return string.Empty;
-
-            // Handle IList<SimpleArtist> from SpotifyAPI
-            if (value is IList<SimpleArtist> simpleArtists)
+            return value switch
             {
-                return string.Join(Separator, simpleArtists.Select(a => a.Name));
-            }
-            
-            // Handle List<string> from our TrackModel
-            if (value is IList<string> artistNames)
-            {
-                return string.Join(Separator, artistNames);
-            }
-
-            return string.Empty;
+                null => string.Empty,
+                // Handle IList<SimpleArtist> from SpotifyAPI
+                IList<SimpleArtist> simpleArtists => string.Join(Separator, simpleArtists.Select(a => a.Name)),
+                // Handle List<string> from our TrackModel
+                IList<string> artistNames => string.Join(Separator, artistNames),
+                _ => string.Empty
+            };
         }
 
         public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)

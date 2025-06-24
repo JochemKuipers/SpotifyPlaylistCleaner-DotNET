@@ -108,7 +108,7 @@ namespace SpotifyPlaylistCleaner_DotNET.Helpers
         {
             var delay = initialDelay ?? TimeSpan.FromSeconds(1);
 
-            for (int i = 0; i < retryCount; i++)
+            for (var i = 0; i < retryCount; i++)
             {
                 try
                 {

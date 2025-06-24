@@ -25,7 +25,6 @@ public class DuplicatesViewModel : ViewModelBase, IDisposable
 {
     private readonly IDuplicatesService _duplicatesService;
     private readonly ISpotifyService _spotifyService;
-    private readonly ICacheService _cacheService;
     private CancellationTokenSource? _cancellationTokenSource;
 
     private ObservableCollection<DuplicateGroup> _duplicateGroups = [];
@@ -45,7 +44,7 @@ public class DuplicatesViewModel : ViewModelBase, IDisposable
         set => this.RaiseAndSetIfChanged(ref _isDuplicatesViewVisible, value);
     }
 
-    public PlaylistModel? CurrentPlaylist
+    private PlaylistModel? CurrentPlaylist
     {
         get => _currentPlaylist;
         set => this.RaiseAndSetIfChanged(ref _currentPlaylist, value);
@@ -55,54 +54,52 @@ public class DuplicatesViewModel : ViewModelBase, IDisposable
     {
         get
         {
-            if (_source == null)
-            {
-                _source = new HierarchicalTreeDataGridSource<ITreeNode>(
-                    [.. DuplicateGroups.Cast<ITreeNode>()]
-                );
+            if (_source != null) return _source;
+            _source = new HierarchicalTreeDataGridSource<ITreeNode>(
+                [.. DuplicateGroups]
+            );
 
-                // Album Image Column
-                _source.Columns.Add(new TemplateColumn<ITreeNode>(
-                    "Album",
-                    new AlbumImageTemplate(),
-                    width: new GridLength(60, GridUnitType.Pixel)
-                ));
+            // Album Image Column
+            _source.Columns.Add(new TemplateColumn<ITreeNode>(
+                "Album",
+                new AlbumImageTemplate(),
+                width: new GridLength(60, GridUnitType.Pixel)
+            ));
 
-                _source.Columns.Add(new HierarchicalExpanderColumn<ITreeNode>(
-                    new TextColumn<ITreeNode, string>(
-                        "Track Name",
-                        item => GetDisplayName(item),
-                        new GridLength(1, GridUnitType.Star),
-                        new TextColumnOptions<ITreeNode>
-                        {
-                            TextTrimming = TextTrimming.CharacterEllipsis
-                        }
-                    ),
-                    item => GetChildren(item)
-                ));
-
-                _source.Columns.Add(new TextColumn<ITreeNode, string>(
-                    "Artists",
-                    item => GetDisplayArtist(item),
+            _source.Columns.Add(new HierarchicalExpanderColumn<ITreeNode>(
+                new TextColumn<ITreeNode, string>(
+                    "Track Name",
+                    item => GetDisplayName(item),
                     new GridLength(1, GridUnitType.Star),
                     new TextColumnOptions<ITreeNode>
                     {
                         TextTrimming = TextTrimming.CharacterEllipsis
                     }
-                ));
+                ),
+                GetChildren
+            ));
 
-                _source.Columns.Add(new TextColumn<ITreeNode, string>(
-                    "Duration/Count",
-                    item => GetDurationOrCount(item),
-                    new GridLength(100, GridUnitType.Pixel)
-                ));
+            _source.Columns.Add(new TextColumn<ITreeNode, string>(
+                "Artists",
+                item => GetDisplayArtist(item),
+                new GridLength(1, GridUnitType.Star),
+                new TextColumnOptions<ITreeNode>
+                {
+                    TextTrimming = TextTrimming.CharacterEllipsis
+                }
+            ));
 
-                _source.Columns.Add(new TemplateColumn<ITreeNode>(
-                    "Delete",
-                    new DeleteButtonTemplate(this),
-                    width: new GridLength(60, GridUnitType.Pixel)
-                ));
-            }
+            _source.Columns.Add(new TextColumn<ITreeNode, string>(
+                "Duration/Count",
+                item => GetDurationOrCount(item),
+                new GridLength(100, GridUnitType.Pixel)
+            ));
+
+            _source.Columns.Add(new TemplateColumn<ITreeNode>(
+                "Delete",
+                new DeleteButtonTemplate(this),
+                width: new GridLength(60, GridUnitType.Pixel)
+            ));
             return _source;
         }
     }
@@ -111,7 +108,7 @@ public class DuplicatesViewModel : ViewModelBase, IDisposable
     {
         if (item is DuplicateGroup group)
         {
-            return group.Tracks.Cast<ITreeNode>();
+            return group.Tracks;
         }
         return null;
     }
@@ -229,12 +226,11 @@ public class DuplicatesViewModel : ViewModelBase, IDisposable
 
     public DuplicatesViewModel(
         IDuplicatesService duplicatesService,
-        ISpotifyService spotifyService,
-        ICacheService cacheService)
+        ISpotifyService spotifyService
+        )
     {
         _duplicatesService = duplicatesService;
         _spotifyService = spotifyService;
-        _cacheService = cacheService;
 
         FindDuplicatesCommand = ReactiveCommand.Create<ObservableCollection<TrackModel>>(FindDuplicates);
         RemoveAllDuplicatesCommand = ReactiveCommand.Create(RemoveAllDuplicates);
@@ -248,12 +244,12 @@ public class DuplicatesViewModel : ViewModelBase, IDisposable
 
     public ICommand FindDuplicatesCommand { get; }
     public ICommand RemoveAllDuplicatesCommand { get; }
-    public ICommand DeleteDuplicateCommand { get; }
+    private ICommand DeleteDuplicateCommand { get; }
     public ICommand BackToTracksCommand { get; }
 
-    public void FindDuplicates(ObservableCollection<TrackModel> tracks)
+    private void FindDuplicates(ObservableCollection<TrackModel> tracks)
     {
-        if (tracks == null || tracks.Count == 0)
+        if (tracks.Count == 0)
         {
             OnStatusMessageChanged("No tracks to analyze for duplicates");
             return;
@@ -297,67 +293,74 @@ public class DuplicatesViewModel : ViewModelBase, IDisposable
         }
     }
 
-    public async void RemoveAllDuplicates()
+    private async void RemoveAllDuplicates()
     {
-        if (DuplicateGroups.Count == 0 || CurrentPlaylist == null)
-        {
-            OnStatusMessageChanged("No duplicates to remove");
-            return;
-        }
-
-        CancelCurrentOperations();
-        var cancellationToken = _cancellationTokenSource?.Token ?? CancellationToken.None;
-
         try
         {
-            var tracksToDelete = CollectTracksToDelete();
-
-            if (tracksToDelete.Count == 0)
+            if (DuplicateGroups.Count == 0 || CurrentPlaylist == null)
             {
-                OnStatusMessageChanged("No tracks to delete after applying rules");
+                OnStatusMessageChanged("No duplicates to remove");
                 return;
             }
 
-            int successCount = 0;
-            foreach (var track in tracksToDelete)
+            CancelCurrentOperations();
+            var cancellationToken = _cancellationTokenSource?.Token ?? CancellationToken.None;
+
+            try
             {
-                try
-                {
-                    if (cancellationToken.IsCancellationRequested)
-                        break;
+                var tracksToDelete = CollectTracksToDelete();
 
-                    if (CurrentPlaylist.IsLikedSongs)
-                    {
-                        await _spotifyService.RemoveTrackFromLikedSongs(track.Id, cancellationToken);
-                    }
-                    else
-                    {
-                        await _spotifyService.RemoveTrackFromPlaylist(CurrentPlaylist.Id, track.Uri, cancellationToken);
-                    }
-
-                    successCount++;
-                }
-                catch (Exception ex)
+                if (tracksToDelete.Count == 0)
                 {
-                    Console.WriteLine($"Error removing track {track.Name}: {ex.Message}");
+                    OnStatusMessageChanged("No tracks to delete after applying rules");
+                    return;
                 }
+
+                var successCount = 0;
+                foreach (var track in tracksToDelete)
+                {
+                    try
+                    {
+                        if (cancellationToken.IsCancellationRequested)
+                            break;
+
+                        if (CurrentPlaylist.IsLikedSongs)
+                        {
+                            await _spotifyService.RemoveTrackFromLikedSongs(track.Id, cancellationToken);
+                        }
+                        else
+                        {
+                            await _spotifyService.RemoveTrackFromPlaylist(CurrentPlaylist.Id, track.Uri, cancellationToken);
+                        }
+
+                        successCount++;
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Error removing track {track.Name}: {ex.Message}");
+                    }
+                }
+
+                DuplicateGroups.Clear();
+                IsDuplicatesViewVisible = false;
+                OnStatusMessageChanged($"Successfully removed {successCount} of {tracksToDelete.Count} duplicate tracks using smart selection");
+
+                DuplicatesRemoved?.Invoke(this, EventArgs.Empty);
             }
-
-            DuplicateGroups.Clear();
-            IsDuplicatesViewVisible = false;
-            OnStatusMessageChanged($"Successfully removed {successCount} of {tracksToDelete.Count} duplicate tracks using smart selection");
-
-            DuplicatesRemoved?.Invoke(this, EventArgs.Empty);
+            catch (Exception ex)
+            {
+                OnStatusMessageChanged($"Error removing duplicates: {ex.Message}");
+            }
         }
-        catch (Exception ex)
+        catch (Exception e)
         {
-            OnStatusMessageChanged($"Error removing duplicates: {ex.Message}");
+            OnStatusMessageChanged($"Error processing duplicates: {e.Message}");
         }
     }
 
     private void DeleteDuplicate(TrackModel track)
     {
-        if (track == null || CurrentPlaylist == null)
+        if (CurrentPlaylist == null)
             return;
 
         CancelCurrentOperations();
@@ -372,7 +375,7 @@ public class DuplicatesViewModel : ViewModelBase, IDisposable
             // Remove track from the group
             group.Tracks.Remove(track);
 
-            // Create a brand new source to force a complete refresh
+            // Create a brand-new source to force a complete refresh
             _source = null;
             
             // Create a new collection to force change notification
@@ -419,12 +422,10 @@ public class DuplicatesViewModel : ViewModelBase, IDisposable
                             this.RaisePropertyChanged(nameof(Source));
                         }
 
-                        if (DuplicateGroups.Count == 0)
-                        {
-                            IsDuplicatesViewVisible = false;
-                            BackToTracksView?.Invoke(this, EventArgs.Empty);
-                            DuplicatesRemoved?.Invoke(this, EventArgs.Empty);
-                        }
+                        if (DuplicateGroups.Count != 0) return;
+                        IsDuplicatesViewVisible = false;
+                        BackToTracksView?.Invoke(this, EventArgs.Empty);
+                        DuplicatesRemoved?.Invoke(this, EventArgs.Empty);
                     });
                 }
                 catch (Exception ex)
@@ -451,15 +452,9 @@ public class DuplicatesViewModel : ViewModelBase, IDisposable
             if (group.Tracks.Count <= 1)
                 continue;
 
-            int indexToKeep = _duplicatesService.GetTrackToKeepIndex(group);
+            var indexToKeep = _duplicatesService.GetTrackToKeepIndex(group);
 
-            for (int i = 0; i < group.Tracks.Count; i++)
-            {
-                if (i != indexToKeep)
-                {
-                    tracksToDelete.Add(group.Tracks[i]);
-                }
-            }
+            tracksToDelete.AddRange(group.Tracks.Where((t, i) => i != indexToKeep));
         }
 
         return tracksToDelete;

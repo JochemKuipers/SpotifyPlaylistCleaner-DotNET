@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading;
@@ -15,7 +14,6 @@ namespace SpotifyPlaylistCleaner_DotNET.ViewModels;
 public class PlaylistViewModel : ViewModelBase, IDisposable
 {
     private readonly ISpotifyService _spotifyService;
-    private readonly ICacheService _cacheService;
     private CancellationTokenSource? _cancellationTokenSource;
 
     private ObservableCollection<PlaylistModel> _playlists = [];
@@ -24,10 +22,10 @@ public class PlaylistViewModel : ViewModelBase, IDisposable
     private PlaylistModel? _selectedPlaylist;
     private bool _isLoadingPlaylists;
 
-    public ObservableCollection<PlaylistModel> Playlists
+    private ObservableCollection<PlaylistModel> Playlists
     {
         get => _playlists;
-        private set => this.RaiseAndSetIfChanged(ref _playlists, value);
+        set => this.RaiseAndSetIfChanged(ref _playlists, value);
     }
 
     public ObservableCollection<PlaylistModel> FilteredPlaylists
@@ -66,10 +64,9 @@ public class PlaylistViewModel : ViewModelBase, IDisposable
     public event EventHandler<PlaylistModel>? PlaylistSelected;
     public event EventHandler<string>? StatusMessageChanged;
 
-    public PlaylistViewModel(ISpotifyService spotifyService, ICacheService cacheService)
+    public PlaylistViewModel(ISpotifyService spotifyService)
     {
         _spotifyService = spotifyService;
-        _cacheService = cacheService;
 
         RefreshPlaylistsCommand = ReactiveCommand.CreateFromTask(LoadPlaylistsAsync);
     }
@@ -86,11 +83,10 @@ public class PlaylistViewModel : ViewModelBase, IDisposable
             IsLoadingPlaylists = true;
             OnStatusMessageChanged("Loading your playlists...");
 
-            var user = await _spotifyService.GetCurrentUser(cancellationToken);
             var spotifyPlaylists = await _spotifyService.GetUserPlaylists(cancellationToken);
 
             var playlistModels = spotifyPlaylists
-                .Select(p => PlaylistModel.FromFullPlaylist(p))
+                .Select(PlaylistModel.FromFullPlaylist)
                 .ToList();
 
             await Dispatcher.UIThread.InvokeAsync(() =>
