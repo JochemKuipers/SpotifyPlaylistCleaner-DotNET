@@ -230,7 +230,7 @@ private class TrackTagsTemplate : IDataTemplate
                 }
                 break;
                 
-            case DuplicateGroup group:
+            case DuplicateGroup:
                 // For groups, we don't show tags
                 break;
         }
