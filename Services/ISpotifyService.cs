@@ -8,8 +8,6 @@ namespace SpotifyPlaylistCleaner_DotNET.Services;
 
 public interface ISpotifyService
 {
-    Task<SpotifyClient> GetClient();
-    Task<PrivateUser> GetCurrentUser(CancellationToken cancellationToken = default);
     Task<IList<FullPlaylist>> GetUserPlaylists(CancellationToken cancellationToken = default);
     Task<IList<FullTrack>> GetPlaylistTracks(string playlistId, IProgress<(int Loaded, int Total)>? progress = null, CancellationToken cancellationToken = default);
     Task<IList<FullTrack>> GetLikedTracks(IProgress<(int Loaded, int Total)>? progress = null, CancellationToken cancellationToken = default);

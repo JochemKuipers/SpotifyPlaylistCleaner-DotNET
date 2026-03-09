@@ -26,23 +26,6 @@ public class SpotifyAuthenticationService : IAuthenticationService
         }
     }
 
-    public async Task<bool> IsAuthenticated()
-    {
-        if (_spotifyClient == null)
-            return false;
-
-        try
-        {
-            // Try to get current user to verify the client is authenticated
-            await _spotifyClient.UserProfile.Current();
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
     public async Task<string> GetUserDisplayName()
     {
         if (_spotifyClient == null)
