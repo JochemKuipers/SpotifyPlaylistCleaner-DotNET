@@ -12,15 +12,12 @@ public class TrackModel : ITreeNode
     public string Name { get; set; } = string.Empty;
     public List<string> Artists { get; set; } = [];
     public string ArtistNames => string.Join(", ", Artists);
-    public string Album { get; private init; } = string.Empty;
     public string AlbumImageUrl { get; set; } = string.Empty;
     public int DurationMs { get; private init; }
     public string Duration => TimeSpan.FromMilliseconds(DurationMs).ToString(@"mm\:ss");
-    public bool IsPlayable { get; private init; }
     public bool IsExplicit { get; set; }
     public bool IsLocal { get; set; }
     public int DisplayIndex { get; set; }
-    public int PlaylistPosition { get; set; } // Track's position in the playlist for removal operations
 
     // ITreeNode implementation
     string ITreeNode.DisplayName => Name;
@@ -35,14 +32,11 @@ public class TrackModel : ITreeNode
             Uri = track.Uri,
             Name = track.Name,
             Artists = [.. track.Artists.Select(a => a.Name)],
-            Album = track.Album.Name,
             AlbumImageUrl = track.Album.Images.FirstOrDefault()?.Url ?? string.Empty,
             DurationMs = track.DurationMs,
-            IsPlayable = track.IsPlayable,
             IsExplicit = track.Explicit,
             IsLocal = track.IsLocal,
             DisplayIndex = index,
-            PlaylistPosition = position >= 0 ? position : index
         };
     }
 }
