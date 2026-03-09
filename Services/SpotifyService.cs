@@ -68,8 +68,7 @@ public class SpotifyService(SpotifyClient? spotifyClient, IAuthenticationService
         while (playlistsResponse.Next != null)
         {
             playlistsResponse = await client.NextPage(playlistsResponse);
-            foreach (var playlist in playlistsResponse.Items!.Where(p => p.Owner?.Id == user.Id))
-                tempPlaylists.Add(playlist);
+            tempPlaylists.AddRange(playlistsResponse.Items!.Where(p => p.Owner?.Id == user.Id));
         }
 
         return tempPlaylists;
@@ -259,11 +258,36 @@ public class SpotifyService(SpotifyClient? spotifyClient, IAuthenticationService
             cancellationToken);
     }
 
-    public async Task RemoveTrackFromLikedSongs(string trackId, CancellationToken cancellationToken = default)
+    public async Task RemoveTracksFromPlaylist(string playlistId, List<string> trackUris,
+        CancellationToken cancellationToken = default)
+    {
+        var client = await GetOrInitializeClient();
+        var playlist = await client.Playlists.Get(playlistId, cancellationToken);
+        var snapshotId = playlist.SnapshotId;
+        
+        await client.Playlists.RemovePlaylistItems(
+            playlistId,
+            new PlaylistRemoveItemsRequestV2
+            {
+                Items = trackUris.Select(uri => new PlaylistRemoveItemsRequestV2.Item { Uri = uri }).ToList(),
+                SnapshotId = snapshotId
+            },
+            cancellationToken);
+    }
+
+    public async Task RemoveTrackFromLikedSongs(string trackUri, CancellationToken cancellationToken = default)
     {
         var client = await GetOrInitializeClient();
         await client.Library.RemoveItems(
-            new LibraryRemoveItemsRequest([trackId]),
+            new LibraryRemoveItemsRequest([trackUri]),
+            cancellationToken);
+    }
+    
+    public async Task RemoveTracksFromLikedSongs(List<string> trackUris, CancellationToken cancellationToken = default)
+    {
+        var client = await GetOrInitializeClient();
+        await client.Library.RemoveItems(
+            new LibraryRemoveItemsRequest(trackUris.ToList()),
             cancellationToken);
     }
 }

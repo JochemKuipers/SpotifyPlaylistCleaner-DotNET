@@ -6,7 +6,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using Avalonia;
-using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Threading;
 using ReactiveUI;
@@ -155,6 +154,8 @@ public class DuplicatesViewModel : ViewModelBase, IDisposable
             try
             {
                 var tracksToDelete = CollectTracksToDelete();
+                
+                var trackUris = tracksToDelete.Select(t => t.Uri).ToList();
 
                 if (tracksToDelete.Count == 0)
                 {
@@ -163,28 +164,24 @@ public class DuplicatesViewModel : ViewModelBase, IDisposable
                 }
 
                 var successCount = 0;
-                foreach (var track in tracksToDelete)
+                try
                 {
-                    try
-                    {
-                        if (cancellationToken.IsCancellationRequested)
-                            break;
+                    if (cancellationToken.IsCancellationRequested)
+                        return;
 
-                        if (CurrentPlaylist.IsLikedSongs)
-                        {
-                            await _spotifyService.RemoveTrackFromLikedSongs(track.Id, cancellationToken);
-                        }
-                        else
-                        {
-                            await _spotifyService.RemoveTrackFromPlaylist(CurrentPlaylist.Id, track.Uri, cancellationToken);
-                        }
-
-                        successCount++;
-                    }
-                    catch (Exception ex)
+                    if (CurrentPlaylist.IsLikedSongs)
                     {
-                        Console.WriteLine($"Error removing track {track.Name}: {ex.Message}");
+                        await _spotifyService.RemoveTracksFromLikedSongs(trackUris, cancellationToken);                    }
+                    else
+                    {
+                        await _spotifyService.RemoveTracksFromPlaylist(CurrentPlaylist.Id, trackUris,cancellationToken);
                     }
+
+                    successCount = tracksToDelete.Count;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error removing tracks: {ex.Message}");
                 }
 
                 DuplicateGroups.Clear();
