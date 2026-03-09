@@ -325,35 +325,113 @@
                                            VerticalAlignment="Center" />
                             </StackPanel>
 
-                            <TreeDataGrid Grid.Row="1" 
-                                             Source="{Binding DuplicatesViewModel.Source}" 
-                                             Margin="0,10,0,10"
-                                             CanUserResizeColumns="True"
-                                             CanUserSortColumns="True"
-                                             Background="Transparent">
-                                <TreeDataGrid.Styles>
-                                    <Style Selector="TreeDataGrid > ListBoxItem">
-                                        <Setter Property="Background" Value="Transparent" />
-                                    </Style>
-                                    <Style Selector="TreeDataGrid > DataGridColumnHeader">
-                                        <Setter Property="Background" Value="#212121" />
-                                        <Setter Property="Foreground" Value="#B3B3B3" />
-                                        <Setter Property="FontWeight" Value="SemiBold" />
-                                        <Setter Property="Padding" Value="10,8" />
-                                    </Style>
-                                    <Style Selector="TreeDataGrid > ListBoxItem:selected">
-                                        <Setter Property="Background" Value="#333333" />
-                                    </Style>
-                                    <!-- Style for child nodes (tracks within duplicate groups) -->
-                                    <Style Selector="TreeDataGridRow:not(:first-child)">
-                                        <Setter Property="Background" Value="#222222" />
-                                        <Setter Property="BorderThickness" Value="0,1,0,1" />
-                                        <Setter Property="BorderBrush" Value="#333333" />
-                                        <Setter Property="Margin" Value="0,2,0,2" />
-                                        <Setter Property="CornerRadius" Value="2" />
-                                    </Style>
-                                </TreeDataGrid.Styles>
-                            </TreeDataGrid>
+                            <ScrollViewer Grid.Row="1" Margin="0,10,0,10">
+                                <ItemsControl ItemsSource="{Binding DuplicatesViewModel.FilteredDuplicateGroups}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="models:DuplicateGroup">
+                                            <Border Background="#1A1A1A" CornerRadius="6" Margin="0,4" Padding="0">
+                                                <Expander IsExpanded="False" HorizontalAlignment="Stretch">
+                                                    <Expander.Header>
+                                                        <Grid ColumnDefinitions="Auto,*,Auto,Auto" Margin="4,2" HorizontalAlignment="Stretch">
+                                                            <!-- Album Image -->
+                                                            <Border Grid.Column="0" Width="40" Height="40" Background="#333333" CornerRadius="4" Margin="0,0,10,0">
+                                                                <Panel>
+                                                                    <TextBlock Text="{Binding DisplayName[0], FallbackValue='?'}"
+                                                                               VerticalAlignment="Center"
+                                                                               HorizontalAlignment="Center"
+                                                                               Foreground="White"
+                                                                               FontWeight="Bold" />
+                                                                    <Image asyncImage:ImageLoader.Source="{Binding DisplayImage}"
+                                                                           Stretch="UniformToFill"
+                                                                           IsVisible="{Binding DisplayImage, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                                                </Panel>
+                                                            </Border>
+                                                            <!-- Group Info -->
+                                                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="4,0">
+                                                                <TextBlock Text="{Binding DisplayName}" Foreground="White" FontWeight="SemiBold" FontSize="14"
+                                                                           TextTrimming="CharacterEllipsis" />
+                                                                <TextBlock Text="{Binding DisplayArtist}" Foreground="#B3B3B3" FontSize="12"
+                                                                           TextTrimming="CharacterEllipsis" />
+                                                            </StackPanel>
+                                                            <!-- Count -->
+                                                            <TextBlock Grid.Column="2" VerticalAlignment="Center" Foreground="#B3B3B3" Margin="10,0"
+                                                                       Text="{Binding DuplicateCount, StringFormat='{}{0} track(s)'}" />
+                                                            <!-- Delete Group Button -->
+                                                            <Button Grid.Column="3" Background="Transparent" BorderThickness="0"
+                                                                    Padding="8,4" VerticalAlignment="Center"
+                                                                    Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).DuplicatesViewModel.DeleteGroupDuplicatesCommand}"
+                                                                    CommandParameter="{Binding}">
+                                                                <TextBlock Text="Delete Duplicates" FontSize="12" Foreground="#ff5252" />
+                                                            </Button>
+                                                        </Grid>
+                                                    </Expander.Header>
+
+                                                    <!-- Child tracks -->
+                                                    <ItemsControl ItemsSource="{Binding Tracks}" Margin="20,0,0,8">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate x:DataType="models:TrackModel">
+                                                                <Border Background="#222222" CornerRadius="4" Margin="0,2" Padding="8,6">
+                                                                    <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto">
+                                                                        <!-- Track Album Image -->
+                                                                        <Border Grid.Column="0" Width="36" Height="36" Background="#333333" CornerRadius="4" Margin="0,0,10,0">
+                                                                            <Panel>
+                                                                                <TextBlock Text="{Binding Name[0], FallbackValue='?'}"
+                                                                                           VerticalAlignment="Center"
+                                                                                           HorizontalAlignment="Center"
+                                                                                           Foreground="White"
+                                                                                           FontWeight="Bold"
+                                                                                           FontSize="10" />
+                                                                                <Image asyncImage:ImageLoader.Source="{Binding AlbumImageUrl}"
+                                                                                       Stretch="UniformToFill"
+                                                                                       IsVisible="{Binding AlbumImageUrl, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                                                            </Panel>
+                                                                        </Border>
+                                                                        <!-- Track Info -->
+                                                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="4,0">
+                                                                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                                                                <TextBlock Text="{Binding Name}" Foreground="White" FontSize="13"
+                                                                                           TextTrimming="CharacterEllipsis" />
+                                                                                <Border Background="#333333" CornerRadius="2" Padding="3,2"
+                                                                                        IsVisible="{Binding IsExplicit}">
+                                                                                    <TextBlock Text="Explicit" FontSize="9" Foreground="#B3B3B3" />
+                                                                                </Border>
+                                                                                <Border Background="#333333" CornerRadius="2" Padding="3,2"
+                                                                                        IsVisible="{Binding IsLocal}">
+                                                                                    <TextBlock Text="Local" FontSize="9" Foreground="#B3B3B3" />
+                                                                                </Border>
+                                                                            </StackPanel>
+                                                                            <TextBlock Text="{Binding ArtistNames}" Foreground="#B3B3B3" FontSize="11"
+                                                                                       TextTrimming="CharacterEllipsis" />
+                                                                        </StackPanel>
+                                                                        <!-- Duration -->
+                                                                        <TextBlock Grid.Column="2" Text="{Binding Duration}" Foreground="#B3B3B3"
+                                                                                   VerticalAlignment="Center" Margin="10,0" FontSize="12" />
+                                                                        <!-- Playlist Position -->
+                                                                        <TextBlock Grid.Column="3" Text="{Binding PlaylistPosition}" Foreground="#666666"
+                                                                                   VerticalAlignment="Center" Margin="10,0" FontSize="11" />
+                                                                        <!-- Delete Track Button -->
+                                                                        <Button Grid.Column="5" Background="Transparent" BorderThickness="0"
+                                                                                Width="32" Height="32" Padding="0"
+                                                                                HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                        Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).DuplicatesViewModel.DeleteDuplicateCommand}"
+                                                                                CommandParameter="{Binding}"
+                                                                                ToolTip.Tip="Delete Track">
+                                                                            <Viewbox Width="16" Height="16" Margin="-2,-2,2,2">
+                                                                                <Path Data="M6,19C6,20.1 6.9,21 8,21H16C17.1,21 18,20.1 18,19V7H6V19M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19V4Z"
+                                                                                      Fill="#ff5252" />
+                                                                            </Viewbox>
+                                                                        </Button>
+                                                                    </Grid>
+                                                                </Border>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </Expander>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
 
                             <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right"
                                         Margin="0,10,0,0">

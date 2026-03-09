@@ -22,9 +22,8 @@
         <PackageReference Include="AsyncImageLoader.Avalonia" Version="3.7.0" />
         <PackageReference Include="Avalonia" Version="11.3.12" />
         <PackageReference Include="Avalonia.Controls.DataGrid" Version="11.3.12" />
-        <PackageReference Include="Avalonia.Controls.TreeDataGrid" Version="11.3.1" />
         <PackageReference Include="Avalonia.Desktop" Version="11.3.12" />
-        <PackageReference Include="Avalonia.ReactiveUI" Version="11.3.8" />
+        <PackageReference Include="Avalonia.ReactiveUI" Version="11.3.9" />
         <PackageReference Include="Avalonia.ReactiveUI.Events" Version="0.10.22" />
         <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.12" />
         <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.12" />
@@ -35,7 +34,6 @@
         </PackageReference>
         <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
         <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.3" />
-        <PackageReference Include="ReactiveUI" Version="23.1.8" />
         <PackageReference Include="SpotifyAPI.Web" Version="7.4.2" />
         <PackageReference Include="SpotifyAPI.Web.Auth" Version="7.4.2" />
         <PackageReference Include="Svg.Controls.Skia.Avalonia" Version="11.3.9.3" />
