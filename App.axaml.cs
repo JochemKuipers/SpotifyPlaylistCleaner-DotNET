@@ -24,7 +24,6 @@ public class App : Application
 
         // Register services
         services.AddSingleton<IAuthenticationService, SpotifyAuthenticationService>();
-        services.AddSingleton<ICacheService, FileCacheService>();
         services.AddSingleton<IDuplicatesService, DuplicatesService>();
 
         // Change how SpotifyService is registered

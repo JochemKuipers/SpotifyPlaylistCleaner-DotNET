@@ -65,7 +65,6 @@
                 <Panel Grid.Column="2">
                     <!-- Desktop layout (horizontal) -->
                     <StackPanel Orientation="Horizontal" Spacing="10">
-                        <!-- Refresh Cache Button -->
                         <Button Command="{Binding TrackListViewModel.RefreshTracksCommand}"
                                 IsEnabled="{Binding IsAuthenticated}"
                                 ToolTip.Tip="Refresh Tracks"

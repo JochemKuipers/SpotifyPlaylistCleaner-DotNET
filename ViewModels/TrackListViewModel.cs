@@ -1,13 +1,10 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading;
-using System.Threading.Tasks;
 using System.Windows.Input;
 using Avalonia.Threading;
 using ReactiveUI;
-using SpotifyAPI.Web;
 using SpotifyPlaylistCleaner_DotNET.Models;
 using SpotifyPlaylistCleaner_DotNET.Services;
 
@@ -16,7 +13,6 @@ namespace SpotifyPlaylistCleaner_DotNET.ViewModels;
 public class TrackListViewModel : ViewModelBase, IDisposable
 {
     private readonly ISpotifyService _spotifyService;
-    private readonly ICacheService _cacheService;
     private CancellationTokenSource? _cancellationTokenSource;
 
     private ObservableCollection<TrackModel> _tracks = [];
@@ -81,19 +77,16 @@ public class TrackListViewModel : ViewModelBase, IDisposable
     public event EventHandler<string>? StatusMessageChanged;
     public event EventHandler? TracksLoaded;
 
-    public TrackListViewModel(ISpotifyService spotifyService, ICacheService cacheService)
+    public TrackListViewModel(ISpotifyService spotifyService)
     {
         _spotifyService = spotifyService;
-        _cacheService = cacheService;
 
-        RefreshTracksCommand = ReactiveCommand.Create(() => RefreshTracks(false));
-        ClearCacheCommand = ReactiveCommand.Create(() => RefreshTracks(true));
+        RefreshTracksCommand = ReactiveCommand.Create(() => RefreshTracks());
         ResetFiltersCommand = ReactiveCommand.Create(() => SearchQuery = string.Empty);
         DeleteTrackCommand = ReactiveCommand.Create<TrackModel>(DeleteTrack);
     }
 
     public ICommand RefreshTracksCommand { get; }
-    public ICommand ClearCacheCommand { get; }
     public ICommand ResetFiltersCommand { get; }
     public ICommand DeleteTrackCommand { get; }
 
@@ -113,17 +106,6 @@ public class TrackListViewModel : ViewModelBase, IDisposable
                 LoadingProgress = 0;
                 LoadingStatusMessage = $"Loading tracks for '{playlist.Name}'...";
                 OnStatusMessageChanged($"Loading tracks for '{playlist.Name}'...");
-
-                // Try loading from cache first
-                var cachedTracks = playlist.IsLikedSongs
-                    ? await _cacheService.LoadLikedTracksFromCacheAsync(cancellationToken)
-                    : await _cacheService.LoadTracksFromCacheAsync(playlist.Id, cancellationToken);
-
-                if (cachedTracks is { Count: > 0 })
-                {
-                    await LoadTracksFromCache(cachedTracks);
-                    return;
-                }
 
                 // If not in cache, load from API with progress reporting
                 var progress = new Progress<(int Loaded, int Total)>(progress =>
@@ -153,12 +135,7 @@ public class TrackListViewModel : ViewModelBase, IDisposable
 
                     TracksLoaded?.Invoke(this, EventArgs.Empty);
                 });
-
-                // Save to cache
-                if (playlist.IsLikedSongs)
-                    await _cacheService.SaveLikedTracksToCacheAsync([.. tracks], cancellationToken);
-                else
-                    await _cacheService.SaveTracksToCacheAsync(playlist.Id, [.. tracks], cancellationToken);
+                
             }
             catch (OperationCanceledException)
             {
@@ -184,25 +161,6 @@ public class TrackListViewModel : ViewModelBase, IDisposable
         }
     }
 
-    private async Task LoadTracksFromCache(IList<FullTrack> cachedTracks)
-    {
-        var trackModels = cachedTracks
-            .Select((t, i) => TrackModel.FromFullTrack(t, i + 1))
-            .ToList();
-
-        await Dispatcher.UIThread.InvokeAsync(() =>
-        {
-            Tracks = new ObservableCollection<TrackModel>(trackModels);
-            FilterTracks();
-
-            var trackText = CurrentPlaylist!.IsLikedSongs ? "liked songs" : "tracks";
-            OnStatusMessageChanged($"Loaded {cachedTracks.Count} {trackText} from cache");
-
-            IsLoadingTracks = false;
-            TracksLoaded?.Invoke(this, EventArgs.Empty);
-        });
-    }
-
     private void FilterTracks()
     {
         if (string.IsNullOrWhiteSpace(SearchQuery))
@@ -219,32 +177,20 @@ public class TrackListViewModel : ViewModelBase, IDisposable
         }
     }
 
-    public void RefreshTracks(bool clearCache)
+    public void RefreshTracks()
     {
         if (CurrentPlaylist == null)
         {
             OnStatusMessageChanged("No playlist selected to refresh");
             return;
         }
-
-        if (clearCache)
-        {
-            _cacheService.ClearCache();
-            OnStatusMessageChanged("Cache cleared. Refreshing data...");
-        }
-
-        var cacheSetting = _cacheService.IsCacheEnabled;
-        _cacheService.IsCacheEnabled = false;
-
+        
         CancelCurrentOperations();
         Tracks.Clear();
         FilteredTracks.Clear();
 
         // Reload tracks
         LoadTracksForPlaylist(CurrentPlaylist);
-
-        // Restore cache setting
-        _cacheService.IsCacheEnabled = cacheSetting;
     }
 
     private async void DeleteTrack(TrackModel track)
@@ -275,26 +221,6 @@ public class TrackListViewModel : ViewModelBase, IDisposable
                     await _spotifyService.RemoveTrackFromPlaylist(CurrentPlaylist.Id, track.Uri, cancellationToken);
                     OnStatusMessageChanged($"Removed '{track.Name}' from playlist");
                 }
-
-                // Update cache
-                if (!_cacheService.IsCacheEnabled) return;
-                var fullTracks = Tracks.Select(t => new FullTrack
-                {
-                    Id = t.Id,
-                    Uri = t.Uri,
-                    Name = t.Name,
-                    Artists = [.. t.Artists.Select(a => new SimpleArtist { Name = a })],
-                    Album = new SimpleAlbum { Name = t.Album },
-                    DurationMs = t.DurationMs,
-                    IsPlayable = t.IsPlayable,
-                    Explicit = t.IsExplicit,
-                    IsLocal = t.IsLocal
-                }).ToList();
-
-                if (CurrentPlaylist.IsLikedSongs)
-                    await _cacheService.SaveLikedTracksToCacheAsync(fullTracks, cancellationToken);
-                else
-                    await _cacheService.SaveTracksToCacheAsync(CurrentPlaylist.Id, fullTracks, cancellationToken);
             }
             catch (Exception ex)
             {

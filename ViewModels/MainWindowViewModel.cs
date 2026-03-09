@@ -39,14 +39,13 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     public MainWindowViewModel(
         IAuthenticationService authService,
         ISpotifyService spotifyService,
-        ICacheService cacheService,
         IDuplicatesService duplicatesService)
     {
         _authService = authService;
 
         // Create child view models
         PlaylistViewModel = new PlaylistViewModel(spotifyService);
-        TrackListViewModel = new TrackListViewModel(spotifyService, cacheService);
+        TrackListViewModel = new TrackListViewModel(spotifyService);
         DuplicatesViewModel = new DuplicatesViewModel(duplicatesService, spotifyService);
 
         // Set up event handlers
@@ -55,7 +54,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         TrackListViewModel.StatusMessageChanged += (sender, message) => StatusMessage = message;
         DuplicatesViewModel.StatusMessageChanged += (sender, message) => StatusMessage = message;
         DuplicatesViewModel.BackToTracksView += (sender, args) => DuplicatesViewModel.IsDuplicatesViewVisible = false;
-        DuplicatesViewModel.DuplicatesRemoved += (sender, args) => TrackListViewModel.RefreshTracks(false);
+        DuplicatesViewModel.DuplicatesRemoved += (sender, args) => TrackListViewModel.RefreshTracks();
 
         // Create commands
         AuthenticateCommand = ReactiveCommand.CreateFromTask(AuthenticateSpotify);

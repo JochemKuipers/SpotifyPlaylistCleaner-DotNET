@@ -257,8 +257,7 @@ public class DuplicatesViewModel : ViewModelBase, IDisposable
                             ? desktop.MainWindow?.DataContext as MainWindowViewModel
                             : null;
 
-                        // Refresh the tracks without clearing the cache
-                        mainViewModel?.TrackListViewModel.RefreshTracks(true);
+                        mainViewModel?.TrackListViewModel.RefreshTracks();
 
                         if (DuplicateGroups.Count != 0) return;
                         IsDuplicatesViewVisible = false;
@@ -362,8 +361,7 @@ public class DuplicatesViewModel : ViewModelBase, IDisposable
                             ? desktop.MainWindow?.DataContext as MainWindowViewModel
                             : null;
 
-                        // Refresh the tracks without clearing the cache
-                        mainViewModel?.TrackListViewModel.RefreshTracks(true);
+                        mainViewModel?.TrackListViewModel.RefreshTracks();
 
                         if (DuplicateGroups.Count != 0) return;
                         IsDuplicatesViewVisible = false;
